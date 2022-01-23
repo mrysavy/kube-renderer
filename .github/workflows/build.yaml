@@ -1,0 +1,26 @@
+name: Build
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - README.md
+      - .github/dependabot.yaml
+      - .github/workflow/build.yaml
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Helm toolset
+        uses: hiberbee/github-action-helm@1.5.0
+
+      - name: Build
+        run: |
+          make all
+

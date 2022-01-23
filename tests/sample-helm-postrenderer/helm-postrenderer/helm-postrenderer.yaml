@@ -1,0 +1,28 @@
+---
+# Source: test-helm/charts/TestHelm/templates/cm1.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: helm-postrenderer-1
+  namespace: default
+  labels:
+    version.app: 0.1.0
+    version.chart: 1.0.0
+    postrender: test
+spec:
+  key1: value1
+  key2: value2
+---
+# Source: test-helm/charts/TestHelm/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: helm-postrenderer-2
+  namespace: default
+  labels:
+    version.app: 0.1.0
+    version.chart: 1.0.0
+    postrender: test
+spec:
+  key1: value1
+  key2: value2

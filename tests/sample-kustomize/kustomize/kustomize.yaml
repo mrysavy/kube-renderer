@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: test
+  name: cm-1
+  namespace: test
+spec:
+  key1: value1
+  key2: value2
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: test
+  name: cm-2
+  namespace: test
+spec:
+  key1: value1
+  key2: value2

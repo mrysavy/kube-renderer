@@ -1,0 +1,3 @@
+releases:
+  - chart: ./source/TestHelm
+    name: test-helm

@@ -1,0 +1,7 @@
+resources:
+- source/base
+
+namespace: test
+
+commonLabels:
+  app: test

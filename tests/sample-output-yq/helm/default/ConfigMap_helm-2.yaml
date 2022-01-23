@@ -1,0 +1,12 @@
+# Source: test-helm/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: helm-2
+  namespace: default
+  labels:
+    version.app: 0.1.0
+    version.chart: 1.0.0
+spec:
+  key1: value1
+  key2: value2

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    version.app: 0.1.0
+    version.chart: 1.0.0
+  name: helm-kustomize-1
+  namespace: kustomized
+spec:
+  key1: value1
+  key2: value2
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    version.app: 0.1.0
+    version.chart: 1.0.0
+  name: helm-kustomize-2
+  namespace: kustomized
+spec:
+  key1: value1
+  key2: value2

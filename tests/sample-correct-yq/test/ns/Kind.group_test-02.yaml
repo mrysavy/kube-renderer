@@ -1,0 +1,5 @@
+apiVersion: group/v1
+kind: Kind
+metadata:
+  name: test-02
+  namespace: ns
