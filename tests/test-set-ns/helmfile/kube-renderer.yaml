@@ -1,0 +1,3 @@
+ignore: false
+output: PLAIN
+namespace: set-namespace

@@ -29,6 +29,11 @@ function render {
 
 function render_helmfile {
     cd input
+
+    if [[ -n "${NAMESPACE}" ]]; then
+        yq e -i ".releases[] |= (.namespace=\"${NAMESPACE}\")" helmfile.yaml
+    fi
+
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
         helmfile template --output-dir ../output/ --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
     else
