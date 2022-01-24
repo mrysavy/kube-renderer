@@ -3,6 +3,9 @@
 ################################################################################
 ##### kube-renderer version <KUBE_RENDERER_VERSION>
 ################################################################################
+##### Author: Michal Rysavy
+##### Licensed under GNU GENERAL PUBLIC LICENSE Version 3
+################################################################################
 
 set -eu
 
@@ -34,26 +37,44 @@ function render_helmfile {
 }
 
 function render_helm {
+    local OPTIONS='--repository-config <(echo)'
+
+    if [[ -n "${NAMESPACE}" ]]; then
+        OPTIONS+=" --namespace ${NAMESPACE}"
+    fi
+
     helm --repository-config <(echo) dependency update ./input
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
-        helm --repository-config <(echo) template "${APP}" ./input --output-dir ./output/
+        helm template ${OPTIONS} "${APP}" ./input --output-dir ./output/
     else
-        helm --repository-config <(echo) template "${APP}" ./input > "output/${APP}.yaml"
+        helm template ${OPTIONS} "${APP}" ./input > "output/${APP}.yaml"
     fi
 }
 
 function render_helm_postrender {
+    local OPTIONS='--repository-config <(echo)'
+
+    if [[ -n "${NAMESPACE}" ]]; then
+        OPTIONS+=" --namespace ${NAMESPACE}"
+    fi
+
     chmod +x ./input/post-renderer.sh
 
     helm --repository-config <(echo) dependency update ./input
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
-        helm --repository-config <(echo) template "${APP}" ./input --post-renderer ./input/post-renderer.sh --output-dir ./output/
+        helm ${OPTIONS} template "${APP}" ./input --post-renderer ./input/post-renderer.sh --output-dir ./output/
     else
-        helm --repository-config <(echo) template "${APP}" ./input --post-renderer ./input/post-renderer.sh > "output/${APP}.yaml"
+        helm ${OPTIONS} template "${APP}" ./input --post-renderer ./input/post-renderer.sh > "./output/${APP}.yaml"
     fi
 }
 
 function render_helm_kustomize {
+    local OPTIONS='--repository-config <(echo)'
+
+    if [[ -n "${NAMESPACE}" ]]; then
+        OPTIONS+=" --namespace ${NAMESPACE}"
+    fi
+
     yq -i eval '(.resources[] | select(. == "<HELM>")) = "helm.yaml"' ./input/kustomization.yaml
 
     cat >./input/post-renderer.sh <<EOF
@@ -66,21 +87,37 @@ EOF
 
     helm --repository-config <(echo) dependency update ./input
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
-        helm --repository-config <(echo) template "${APP}" ./input --post-renderer ./input/post-renderer.sh --output-dir ./output/
+        helm ${OPTIONS} template "${APP}" ./input --post-renderer ./input/post-renderer.sh --output-dir ./output/
     else
-        helm --repository-config <(echo) template "${APP}" ./input --post-renderer ./input/post-renderer.sh > "output/${APP}.yaml"
+        helm ${OPTIONS} template "${APP}" ./input --post-renderer ./input/post-renderer.sh > "./output/${APP}.yaml"
     fi
 }
 
 function render_kustomize {
     local OPTIONS='--enable-helm'
 
-    kustomize build ${OPTIONS} ./input -o "./output/${APP}.yaml"
+    cd ./input
+    if [[ -n "${NAMESPACE}" ]]; then
+        kustomize edit set namespace "${NAMESPACE}"
+    fi
+
+    kustomize build ${OPTIONS} . -o "../output/${APP}.yaml"
 }
 
 function render_plain {
-    cp -pr input/* output/
-    rm -f output/kube-renderer.yaml
+    mkdir input_fixed
+    cp -pr input/* input_fixed/
+    rm -f input_fixed/kube-renderer.yaml
+
+    if [[ -n "${NAMESPACE}" ]]; then
+        find ./input_fixed -type f | sort | xargs -r -L1 yq eval ".metadata.namespace = \"${NAMESPACE}\"" -i
+    fi
+
+    if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'RAW' ]]; then
+        cp -pr input_fixed/* output/
+    else
+        find ./input_fixed -type f | sort | xargs -r yq eval '.' > "./output/${APP}.yaml"
+    fi
 }
 
 function kustomize_output {
@@ -174,12 +211,16 @@ for APP in $(find "${SOURCE}" -mindepth 1 -maxdepth 1 -type d ! -name '.*'); do
             OUTPUT=$(yq eval '.output' "${SOURCE}/${APP}/${CONFIG}" 2>/dev/null | sed 's/null//')
             OUTPUT=${OUTPUT:-""}
 
+            NAMESPACE=$(yq eval '.namespace' "${SOURCE}/${APP}/${CONFIG}" 2>/dev/null | sed 's/null//')
+            NAMESPACE=${NAMESPACE:-""}
+
             mkdir -p "${TMPDIR}/${APP}"
             cp -pr "${SRCDIR}/${APP}" "${TMPDIR}/${APP}/input"
             mkdir "${TMPDIR}/${APP}/output"
 
             cd "${TMPDIR}/${APP}"
             render
+            cd "${TMPDIR}/${APP}"
 
             if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'KUSTOMIZE' ]]; then
                 mkdir "${TMPDIR}/${APP}/output_kustomized"

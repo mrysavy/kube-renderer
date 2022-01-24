@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-1a
+spec:
+  key1: value1
+  key2: value2
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-1b
+spec:
+  key1: value1
+  key2: value2

@@ -100,11 +100,27 @@ setup() {
     assert_success
 }
 
+@test "can render with raw-based output" {
+    mkdir tests-output/test-output-raw
+    run output/kube-renderer.sh tests/test-output-raw tests-output/test-output-raw
+    assert_success
+    run diff -r tests-output/test-output-raw tests/sample-output-raw
+    assert_success
+}
+
 @test "can render with yq-based output correctly" {
     mkdir tests-output/test-correct-yq
     run output/kube-renderer.sh tests/test-correct-yq tests-output/test-correct-yq
     assert_success
     run diff -r tests-output/test-correct-yq tests/sample-correct-yq
+    assert_success
+}
+
+@test "can render setting namespace" {
+    mkdir tests-output/test-set-ns
+    run output/kube-renderer.sh tests/test-set-ns tests-output/test-set-ns
+    assert_success
+    run diff -r tests-output/test-set-ns tests/sample-set-ns
     assert_success
 }
 

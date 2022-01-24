@@ -1,6 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: testovaci_konfigurace
-data:
-  key: value
