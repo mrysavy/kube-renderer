@@ -28,16 +28,20 @@ function render {
 }
 
 function render_helmfile {
-    cd input
+    local INPUT=./input/helmfile.yaml
+
+    if [[ ! -f ./input/helmfile.yaml && -d ./input/helmfile.d ]]; then
+        INPUT=./input/helmfile.d
+    fi
 
     if [[ -n "${NAMESPACE}" ]]; then
-        yq e -i ".releases[] |= (.namespace=\"${NAMESPACE}\")" helmfile.yaml
+        yq e -i ".releases[] |= (.namespace=\"${NAMESPACE}\")" input/helmfile.yaml
     fi
 
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
-        helmfile template --output-dir ../output/ --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+        helmfile -f "${INPUT}" template --output-dir ./output/ --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
     else
-        helmfile template > "../output/${APP}.yaml"
+        helmfile -f "${INPUT}" template > "./output/${APP}.yaml"
     fi
 }
 
