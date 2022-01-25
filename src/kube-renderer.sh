@@ -10,7 +10,7 @@
 set -eu
 
 function render {
-    if [[ -f "./input/helmfile.yaml" ]]; then
+    if [[ -f "./input/helmfile.yaml" || -d "./input/helmfile.d" ]]; then
         render_helmfile
     elif [[ -f "./input/Chart.yaml" ]]; then
         if [[ -f "./input/post-renderer.sh" ]]; then
