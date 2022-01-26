@@ -1,0 +1,6 @@
+app1:
+  namespace: app1
+  output: PLAIN
+
+app2:
+  output: PLAIN

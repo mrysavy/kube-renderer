@@ -1,0 +1,5 @@
+_global:
+  output: PLAIN
+_apps:
+- app1
+- app2
