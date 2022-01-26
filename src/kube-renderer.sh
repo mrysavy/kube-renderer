@@ -1,4 +1,4 @@
-#!/bin/env /bin/bash
+#!/usr/bin/env bash
 
 ################################################################################
 ##### kube-renderer version <KUBE_RENDERER_VERSION>
