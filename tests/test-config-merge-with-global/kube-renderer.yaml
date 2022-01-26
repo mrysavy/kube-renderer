@@ -1,0 +1,6 @@
+_global:
+  output: PLAIN
+  namespace: global
+
+app1:
+  namespace: app1

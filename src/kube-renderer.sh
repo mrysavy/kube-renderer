@@ -114,18 +114,14 @@ function render_kustomize {
 }
 
 function render_plain {
-    mkdir input_fixed
-    cp -pr input/* input_fixed/
-    rm -f input_fixed/kube-renderer.yaml
-
     if [[ -n "${NAMESPACE}" ]]; then
-        find ./input_fixed -type f | sort | xargs -r -L1 yq eval ".metadata.namespace = \"${NAMESPACE}\"" -i
+        find ./input -type f | sort | xargs -r -L1 yq eval ".metadata.namespace = \"${NAMESPACE}\"" -i
     fi
 
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'RAW' ]]; then
-        cp -pr input_fixed/* output/
+        cp -pr input/* output/
     else
-        find ./input_fixed -type f | sort | xargs -r yq eval '.' > "./output/${APP}.yaml"
+        find ./input -type f | sort | xargs -r yq eval '.' > "./output/${APP}.yaml"
     fi
 }
 
@@ -209,21 +205,26 @@ CONFIG=kube-renderer.yaml
 TGTDIR=$(readlink -f ${TARGET})
 
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
-for APP in $(find "${SOURCE}" -mindepth 1 -maxdepth 1 -type d ! -name '.*'); do
-    APP=${APP#${SOURCE}/}
-    cd "${ROOTDIR}"
 
-    if [[ -f "${SOURCE}/${APP}/${CONFIG}" ]]; then
-        if yq eval -e '.ignore | select(. == "true")' "${SOURCE}/${APP}/${CONFIG}" &>/dev/null; then
+if [[ -f "${SOURCE}/${CONFIG}" ]]; then
+    for APP in $(find "${SOURCE}" -mindepth 1 -maxdepth 1 -type d ! -name '.*'); do
+        APP=${APP#${SOURCE}/}
+        cd "${ROOTDIR}"
+
+        if [[ "null" != "$(yq eval '._apps' "${SOURCE}/${CONFIG}" 2>/dev/null)" && "${APP}" != "$(yq eval "._apps[] | select(. == \"${APP}\")" "${SOURCE}/${CONFIG}" 2>/dev/null)" ]]; then
             continue
         else
-            OUTPUT=$(yq eval '.output' "${SOURCE}/${APP}/${CONFIG}" 2>/dev/null | sed 's/null//')
+            mkdir -p "${TMPDIR}/${APP}"
+
+            yq eval ". *+ { \"_global\": {} } *+ { \"${APP}\": {} } | ._global *+ .${APP}" "${SOURCE}/${CONFIG}" > "${TMPDIR}/${APP}/config"
+            cat "${TMPDIR}/${APP}/config"
+
+            OUTPUT=$(yq eval '.output' "${TMPDIR}/${APP}/config" 2>/dev/null | sed 's/null//')
             OUTPUT=${OUTPUT:-""}
 
-            NAMESPACE=$(yq eval '.namespace' "${SOURCE}/${APP}/${CONFIG}" 2>/dev/null | sed 's/null//')
+            NAMESPACE=$(yq eval '.namespace' "${TMPDIR}/${APP}/config" 2>/dev/null | sed 's/null//')
             NAMESPACE=${NAMESPACE:-""}
 
-            mkdir -p "${TMPDIR}/${APP}"
             cp -pr "${SRCDIR}/${APP}" "${TMPDIR}/${APP}/input"
             mkdir "${TMPDIR}/${APP}/output"
 
@@ -243,7 +244,7 @@ for APP in $(find "${SOURCE}" -mindepth 1 -maxdepth 1 -type d ! -name '.*'); do
                 cp -pr "${TMPDIR}/${APP}/output" "${TGTDIR}/${APP}"
             fi
         fi
-    fi
-done
+    done
+fi
 
 rm -rf "${TMPDIR}"

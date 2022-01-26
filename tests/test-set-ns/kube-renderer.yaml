@@ -1,0 +1,4 @@
+_global:
+  ignore: false
+  output: PLAIN
+  namespace: set-namespace
