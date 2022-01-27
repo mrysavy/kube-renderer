@@ -156,6 +156,14 @@ setup() {
     assert_success
 }
 
+@test "can gomplate values" {
+    mkdir tests-output/test-gomplate
+    run output/kube-renderer.sh tests/test-gomplate tests-output/test-gomplate
+    assert_success
+    run diff -r tests-output/test-gomplate tests/sample-gomplate
+    assert_success
+}
+
 teardown() {
     rm -rf tests-output
 }

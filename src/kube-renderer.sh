@@ -46,17 +46,25 @@ function render_helmfile {
 }
 
 function render_helm {
+    cp -pr input input_gomplate
+
+    if [[ -f "${GOMPLATE}" ]]; then
+        if [[ -f './input/values.yaml' ]]; then
+            gomplate -c .=${GOMPLATE} -f ./input/values.yaml -o ./input_gomplate/values.yaml
+        fi
+    fi
+
     local OPTIONS='--repository-config <(echo)'
 
     if [[ -n "${NAMESPACE}" ]]; then
         OPTIONS+=" --namespace ${NAMESPACE}"
     fi
 
-    helm --repository-config <(echo) dependency update ./input
+    helm --repository-config <(echo) dependency update ./input_gomplate
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
-        helm template ${OPTIONS} "${APP}" ./input --output-dir ./output/
+        helm template ${OPTIONS} "${APP}" ./input_gomplate --output-dir ./output/
     else
-        helm template ${OPTIONS} "${APP}" ./input > "output/${APP}.yaml"
+        helm template ${OPTIONS} "${APP}" ./input_gomplate > "output/${APP}.yaml"
     fi
 }
 
@@ -103,9 +111,17 @@ EOF
 }
 
 function render_kustomize {
+    cp -pr input input_gomplate
+
+    if [[ -f "${GOMPLATE}" ]]; then
+        if [[ -d './input' ]]; then
+            gomplate -c .=${GOMPLATE} --input-dir ./input --output-dir ./input_gomplate
+        fi
+    fi
+
     local OPTIONS='--enable-helm'
 
-    cd ./input
+    cd ./input_gomplate
     if [[ -n "${NAMESPACE}" ]]; then
         kustomize edit set namespace "${NAMESPACE}"
     fi
@@ -201,14 +217,20 @@ parse_args "$@"
 SRCDIR=$(readlink -f ${SOURCE})
 ROOTDIR=$(pwd)
 CONFIG=kube-renderer.yaml
+GOMPLATE_VALUES=values.yaml
+
+GOMPLATE=''
+if [[ -f "${SRCDIR}/${GOMPLATE_VALUES}" ]]; then
+    GOMPLATE=$(readlink -f "${SRCDIR}/${GOMPLATE_VALUES}")
+fi
 
 TGTDIR=$(readlink -f ${TARGET})
-
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
 
 if [[ -f "${SOURCE}/${CONFIG}" ]]; then
     for APP in $(find "${SOURCE}" -mindepth 1 -maxdepth 1 -type d ! -name '.*'); do
         APP=${APP#${SOURCE}/}
+
         cd "${ROOTDIR}"
 
         if [[ "null" != "$(yq eval '._apps' "${SOURCE}/${CONFIG}" 2>/dev/null)" && "${APP}" != "$(yq eval "._apps[] | select(. == \"${APP}\")" "${SOURCE}/${CONFIG}" 2>/dev/null)" ]]; then
