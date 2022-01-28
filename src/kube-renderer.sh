@@ -50,7 +50,7 @@ function render_helm {
 
     if [[ -f "${GOMPLATE}" ]]; then
         if [[ -f './input/values.yaml' ]]; then
-            gomplate -c .=${GOMPLATE} -f ./input/values.yaml -o ./input_gomplate/values.yaml
+            gomplate -c .=<(yq eval '{ "values": . }' ${GOMPLATE})?type=application/yaml -f ./input/values.yaml -o ./input_gomplate/values.yaml
         fi
     fi
 
@@ -115,7 +115,7 @@ function render_kustomize {
 
     if [[ -f "${GOMPLATE}" ]]; then
         if [[ -d './input' ]]; then
-            gomplate -c .=${GOMPLATE} --input-dir ./input --output-dir ./input_gomplate
+            gomplate -c .=<(yq eval '{ "values": . }' ${GOMPLATE})?type=application/yaml --input-dir ./input --output-dir ./input_gomplate
         fi
     fi
 

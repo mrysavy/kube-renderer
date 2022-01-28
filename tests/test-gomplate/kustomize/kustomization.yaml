@@ -5,4 +5,4 @@ resources:
 - cm1.yaml
 - cm2.yaml
 
-namespace: {{ .namespace }}
+namespace: {{ .values.namespace }}
