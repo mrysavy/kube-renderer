@@ -239,7 +239,6 @@ if [[ -f "${SOURCE}/${CONFIG}" ]]; then
             mkdir -p "${TMPDIR}/${APP}"
 
             yq eval ". *+ { \"_global\": {} } *+ { \"${APP}\": {} } | ._global *+ .${APP}" "${SOURCE}/${CONFIG}" > "${TMPDIR}/${APP}/config"
-            cat "${TMPDIR}/${APP}/config"
 
             OUTPUT=$(yq eval '.output' "${TMPDIR}/${APP}/config" 2>/dev/null | sed 's/null//')
             OUTPUT=${OUTPUT:-""}
