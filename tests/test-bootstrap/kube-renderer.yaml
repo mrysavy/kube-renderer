@@ -1,3 +1,10 @@
 _global:
   prune: false
   selfheal: false
+
+app2: {}
+app3:
+  selfheal: true
+app4:
+  prune: ""
+  selfheal: true
