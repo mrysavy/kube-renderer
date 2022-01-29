@@ -215,13 +215,21 @@ parse_args "$@"
 
 ROOTDIR=$(pwd)
 CONFIG=kube-renderer.yaml
-BOOTSTRAP='bootstrap.yaml.gotmpl'
+BOOTSTRAP_APP='bootstrap_app.yaml.gotmpl'
+BOOTSTRAP_GLOBAL='bootstrap_global.yaml.gotmpl'
 
 TGTDIR=$(readlink -f ${TARGET})
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
 
-if [[ -f "${SOURCE}/${BOOTSTRAP}" ]]; then
+if [[ -f "${SOURCE}/${BOOTSTRAP_APP}" ]]; then
     mkdir -p "${TGTDIR}/_bootstrap"
+fi
+
+if [[ -f "${SOURCE}/${BOOTSTRAP_GLOBAL}" ]]; then
+    mkdir -p "${TGTDIR}/_bootstrap"
+
+    # yq ea '{"app": select(fi == 0)} * select(fi == 1)' "${TMPDIR}/${APP}/config.yaml" <(yq e -n '{"metadata": {"app": "'${APP}'"}}') > "${TMPDIR}/bootstrap_values.yaml"
+    gomplate -c ".="<(yq eval '._global' "${SOURCE}/${CONFIG}")"?type=application/yaml" -f "${SOURCE}/${BOOTSTRAP_GLOBAL}" -o "${TGTDIR}/_bootstrap/_bootstrap.yaml"
 fi
 
 if [[ -f "${SOURCE}/${CONFIG}" ]]; then
@@ -264,9 +272,9 @@ if [[ -f "${SOURCE}/${CONFIG}" ]]; then
             fi
 
             cd "${ROOTDIR}"
-            if [[ -f "${SOURCE}/${BOOTSTRAP}" ]]; then
+            if [[ -f "${SOURCE}/${BOOTSTRAP_APP}" ]]; then
                 yq ea '{"app": select(fi == 0)} * select(fi == 1)' "${TMPDIR}/${APP}/config.yaml" <(yq e -n '{"metadata": {"app": "'${APP}'"}}') > "${TMPDIR}/${APP}/bootstrap_values.yaml"
-                gomplate -c ".=${TMPDIR}/${APP}/bootstrap_values.yaml?type=application/yaml" -f "${SOURCE}/${BOOTSTRAP}" -o "${TGTDIR}/_bootstrap/${APP}.yaml"
+                gomplate -c ".=${TMPDIR}/${APP}/bootstrap_values.yaml?type=application/yaml" -f "${SOURCE}/${BOOTSTRAP_APP}" -o "${TGTDIR}/_bootstrap/${APP}.yaml"
             fi
         fi
     done

@@ -1,6 +1,7 @@
 _global:
   prune: false
   selfheal: false
+  bootstrap_global_name: bootstrap
 
 app2: {}
 app3:
