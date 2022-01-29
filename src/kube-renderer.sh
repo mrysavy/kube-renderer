@@ -40,7 +40,7 @@ function render_helmfile {
     fi
 
     if [[ -n "${NAMESPACE}" ]]; then
-        yq e -i ".releases[] |= (.namespace=\"${NAMESPACE}\")" input/helmfile.yaml
+       GLOBAL_OPTIONS+=" -n ${NAMESPACE}"
     fi
 
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
