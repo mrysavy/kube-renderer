@@ -4,8 +4,8 @@ metadata:
   name: cm-1
   namespace: set-namespace
 spec:
-  key1: value1
-  key2: value2
+  key1: value1gomplate
+  key2: value2gomplate
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -13,5 +13,5 @@ metadata:
   name: cm-2
   namespace: set-namespace
 spec:
-  key1: value1
-  key2: value2
+  key1: value1gomplate
+  key2: value2gomplate

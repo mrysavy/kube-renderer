@@ -1,0 +1,27 @@
+---
+# Source: TestHelm/templates/cm1.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-helm-1
+  namespace: set-namespace
+  labels:
+    version.app: 0.1.0
+    version.chart: 1.0.0
+spec:
+  key1: value1gomplate
+  key2: value2gomplate
+---
+# Source: TestHelm/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-helm-2
+  namespace: set-namespace
+  labels:
+    version.app: 0.1.0
+    version.chart: 1.0.0
+spec:
+  key1: value1gomplate
+  key2: value2gomplate
+

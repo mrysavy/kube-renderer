@@ -156,11 +156,11 @@ setup() {
     assert_success
 }
 
-@test "can gomplate values" {
-    mkdir tests-output/test-gomplate
-    run output/kube-renderer.sh tests/test-gomplate tests-output/test-gomplate
+@test "global values support" {
+    mkdir tests-output/test-global-values
+    run output/kube-renderer.sh tests/test-global-values tests-output/test-global-values
     assert_success
-    run diff -r tests-output/test-gomplate tests/sample-gomplate
+    run diff -r tests-output/test-global-values tests/sample-global-values
     assert_success
 }
 

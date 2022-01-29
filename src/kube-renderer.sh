@@ -28,6 +28,11 @@ function render {
 }
 
 function render_helmfile {
+    local GLOBAL_OPTIONS=''
+    if [[ -f "${GLOBAL}" ]]; then
+        GLOBAL_OPTIONS+=" --state-values-file ../${GLOBAL}"
+    fi
+
     local INPUT=./input/helmfile.yaml
 
     if [[ ! -f ./input/helmfile.yaml && -d ./input/helmfile.d ]]; then
@@ -39,18 +44,18 @@ function render_helmfile {
     fi
 
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
-        helmfile -f "${INPUT}" template --output-dir ./output/ --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+        helmfile -f "${INPUT}" ${GLOBAL_OPTIONS} template --output-dir ./output/ --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
     else
-        helmfile -f "${INPUT}" template > "./output/${APP}.yaml"
+        helmfile -f "${INPUT}" ${GLOBAL_OPTIONS} template > "./output/${APP}.yaml"
     fi
 }
 
 function render_helm {
     cp -pr input input_gomplate
 
-    if [[ -f "${GOMPLATE}" ]]; then
+    if [[ -f "${GLOBAL}" ]]; then
         if [[ -f './input/values.yaml' ]]; then
-            gomplate -c .=<(yq eval '{ "values": . }' ${GOMPLATE})?type=application/yaml -f ./input/values.yaml -o ./input_gomplate/values.yaml
+            gomplate -c .=<(yq eval '{ "values": . }' ${GLOBAL})?type=application/yaml -f ./input/values.yaml -o ./input_gomplate/values.yaml
         fi
     fi
 
@@ -113,9 +118,9 @@ EOF
 function render_kustomize {
     cp -pr input input_gomplate
 
-    if [[ -f "${GOMPLATE}" ]]; then
+    if [[ -f "${GLOBAL}" ]]; then
         if [[ -d './input' ]]; then
-            gomplate -c .=<(yq eval '{ "values": . }' ${GOMPLATE})?type=application/yaml --input-dir ./input --output-dir ./input_gomplate
+            gomplate -c .=<(yq eval '{ "values": . }' ${GLOBAL})?type=application/yaml --input-dir ./input --output-dir ./input_gomplate
         fi
     fi
 
@@ -214,15 +219,9 @@ function parse_args {
 
 parse_args "$@"
 
-SRCDIR=$(readlink -f ${SOURCE})
 ROOTDIR=$(pwd)
 CONFIG=kube-renderer.yaml
-GOMPLATE_VALUES=values.yaml
-
-GOMPLATE=''
-if [[ -f "${SRCDIR}/${GOMPLATE_VALUES}" ]]; then
-    GOMPLATE=$(readlink -f "${SRCDIR}/${GOMPLATE_VALUES}")
-fi
+GLOBAL=values.yaml
 
 TGTDIR=$(readlink -f ${TARGET})
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
@@ -246,8 +245,12 @@ if [[ -f "${SOURCE}/${CONFIG}" ]]; then
             NAMESPACE=$(yq eval '.namespace' "${TMPDIR}/${APP}/config" 2>/dev/null | sed 's/null//')
             NAMESPACE=${NAMESPACE:-""}
 
-            cp -pr "${SRCDIR}/${APP}" "${TMPDIR}/${APP}/input"
+            cp -pr "${SOURCE}/${APP}" "${TMPDIR}/${APP}/input"
             mkdir "${TMPDIR}/${APP}/output"
+
+            if [[ -f "${SOURCE}/${GLOBAL}" ]]; then
+                cp "${SOURCE}/${GLOBAL}" "${TMPDIR}/${APP}/${GLOBAL}"
+            fi
 
             cd "${TMPDIR}/${APP}"
             render

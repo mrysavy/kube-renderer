@@ -1,0 +1,6 @@
+releases:
+  - chart: ./source/TestHelm
+    name: test-helm
+    values:
+    - key1: {{ .Values.key1 }}
+      key2: {{ .Values.key2 }}
