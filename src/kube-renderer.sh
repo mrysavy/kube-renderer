@@ -28,35 +28,31 @@ function render {
 }
 
 function render_helmfile {
-    local GLOBAL_OPTIONS=''
-    if [[ -f "${GLOBAL}" ]]; then
-        GLOBAL_OPTIONS+=" --state-values-file ../${GLOBAL}"
-    fi
-
     local INPUT=./input/helmfile.yaml
 
+    local VALUES=../values.yaml
     if [[ ! -f ./input/helmfile.yaml && -d ./input/helmfile.d ]]; then
+        VALUES=../../values.yaml
         INPUT=./input/helmfile.d
     fi
 
+    local GLOBAL_OPTIONS=
     if [[ -n "${NAMESPACE}" ]]; then
        GLOBAL_OPTIONS+=" -n ${NAMESPACE}"
     fi
 
     if [[ -n "${OUTPUT}" && "${OUTPUT}" == 'HELM' ]]; then
-        helmfile -f "${INPUT}" ${GLOBAL_OPTIONS} template --output-dir ./output/ --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+        helmfile ${GLOBAL_OPTIONS} -f "${INPUT}" --state-values-file ${VALUES} template --output-dir ./output/ --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
     else
-        helmfile -f "${INPUT}" ${GLOBAL_OPTIONS} template > "./output/${APP}.yaml"
+        helmfile ${GLOBAL_OPTIONS} -f "${INPUT}" --state-values-file ${VALUES} template > "./output/${APP}.yaml"
     fi
 }
 
 function render_helm {
     cp -pr input input_gomplate
 
-    if [[ -f "${GLOBAL}" ]]; then
-        if [[ -f './input/values.yaml' ]]; then
-            gomplate -c .=<(yq eval '{ "values": . }' ${GLOBAL})?type=application/yaml -f ./input/values.yaml -o ./input_gomplate/values.yaml
-        fi
+    if [[ -f './values.yaml' ]]; then
+        gomplate -c .=<(yq eval '{ "values": . }' ./values.yaml)?type=application/yaml -f ./input/values.yaml -o ./input_gomplate/values.yaml
     fi
 
     local OPTIONS='--repository-config <(echo)'
@@ -118,10 +114,8 @@ EOF
 function render_kustomize {
     cp -pr input input_gomplate
 
-    if [[ -f "${GLOBAL}" ]]; then
-        if [[ -d './input' ]]; then
-            gomplate -c .=<(yq eval '{ "values": . }' ${GLOBAL})?type=application/yaml --input-dir ./input --output-dir ./input_gomplate
-        fi
+    if [[ -d './input' ]]; then
+        gomplate -c .=<(yq eval '{ "values": . }' ./values.yaml)?type=application/yaml --input-dir ./input --output-dir ./input_gomplate
     fi
 
     local OPTIONS='--enable-helm'
@@ -221,10 +215,14 @@ parse_args "$@"
 
 ROOTDIR=$(pwd)
 CONFIG=kube-renderer.yaml
-GLOBAL=values.yaml
+BOOTSTRAP='bootstrap.yaml.gotmpl'
 
 TGTDIR=$(readlink -f ${TARGET})
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
+
+if [[ -f "${SOURCE}/${BOOTSTRAP}" ]]; then
+    mkdir -p "${TGTDIR}/_bootstrap"
+fi
 
 if [[ -f "${SOURCE}/${CONFIG}" ]]; then
     for APP in $(find "${SOURCE}" -mindepth 1 -maxdepth 1 -type d ! -name '.*'); do
@@ -237,20 +235,17 @@ if [[ -f "${SOURCE}/${CONFIG}" ]]; then
         else
             mkdir -p "${TMPDIR}/${APP}"
 
-            yq eval ". *+ { \"_global\": {} } *+ { \"${APP}\": {} } | ._global *+ .${APP}" "${SOURCE}/${CONFIG}" > "${TMPDIR}/${APP}/config"
+            yq eval ". *+ { \"_global\": {} } *+ { \"${APP}\": {} } | ._global *+ .${APP}" "${SOURCE}/${CONFIG}" > "${TMPDIR}/${APP}/config.yaml"
+            yq eval ". *+ { \"_global\": {} } *+ { \"${APP}\": {} } | ._global *+ .${APP} | .values" "${SOURCE}/${CONFIG}" > "${TMPDIR}/${APP}/values.yaml"
 
-            OUTPUT=$(yq eval '.output' "${TMPDIR}/${APP}/config" 2>/dev/null | sed 's/null//')
+            OUTPUT=$(yq eval '.output' "${TMPDIR}/${APP}/config.yaml" 2>/dev/null | sed 's/null//')
             OUTPUT=${OUTPUT:-""}
 
-            NAMESPACE=$(yq eval '.namespace' "${TMPDIR}/${APP}/config" 2>/dev/null | sed 's/null//')
+            NAMESPACE=$(yq eval '.namespace' "${TMPDIR}/${APP}/config.yaml" 2>/dev/null | sed 's/null//')
             NAMESPACE=${NAMESPACE:-""}
 
             cp -pr "${SOURCE}/${APP}" "${TMPDIR}/${APP}/input"
             mkdir "${TMPDIR}/${APP}/output"
-
-            if [[ -f "${SOURCE}/${GLOBAL}" ]]; then
-                cp "${SOURCE}/${GLOBAL}" "${TMPDIR}/${APP}/${GLOBAL}"
-            fi
 
             cd "${TMPDIR}/${APP}"
             render
@@ -266,6 +261,12 @@ if [[ -f "${SOURCE}/${CONFIG}" ]]; then
                 cp -pr "${TMPDIR}/${APP}/output_yq" "${TGTDIR}/${APP}"
             else
                 cp -pr "${TMPDIR}/${APP}/output" "${TGTDIR}/${APP}"
+            fi
+
+            cd "${ROOTDIR}"
+            if [[ -f "${SOURCE}/${BOOTSTRAP}" ]]; then
+                yq ea '{"app": select(fi == 0)} * select(fi == 1)' "${TMPDIR}/${APP}/config.yaml" <(yq e -n '{"metadata": {"app": "'${APP}'"}}') > "${TMPDIR}/${APP}/bootstrap_values.yaml"
+                gomplate -c ".=${TMPDIR}/${APP}/bootstrap_values.yaml?type=application/yaml" -f "${SOURCE}/${BOOTSTRAP}" -o "${TGTDIR}/_bootstrap/${APP}.yaml"
             fi
         fi
     done

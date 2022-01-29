@@ -124,7 +124,7 @@ setup() {
     assert_success
 }
 
-@test "render all apps" {
+@test "can render all apps" {
     mkdir tests-output/test-all-apps
     run output/kube-renderer.sh tests/test-all-apps tests-output/test-all-apps
     assert_success
@@ -132,7 +132,7 @@ setup() {
     assert_success
 }
 
-@test "render allowed apps" {
+@test "can render allowed apps" {
     mkdir tests-output/test-allowed-apps
     run output/kube-renderer.sh tests/test-allowed-apps tests-output/test-allowed-apps
     assert_success
@@ -140,7 +140,7 @@ setup() {
     assert_success
 }
 
-@test "correct merge config with global" {
+@test "merge correctly config with global" {
     mkdir tests-output/test-config-merge-with-global
     run output/kube-renderer.sh tests/test-config-merge-with-global tests-output/test-config-merge-with-global
     assert_success
@@ -148,7 +148,7 @@ setup() {
     assert_success
 }
 
-@test "correct merge config no global" {
+@test "merge correctly config no global" {
     mkdir tests-output/test-config-merge-no-global
     run output/kube-renderer.sh tests/test-config-merge-no-global tests-output/test-config-merge-no-global
     assert_success
@@ -156,11 +156,27 @@ setup() {
     assert_success
 }
 
-@test "global values support" {
+@test "render correctly when no config" {
+    mkdir tests-output/test-noconfig
+    run output/kube-renderer.sh tests/test-noconfig tests-output/test-noconfig
+    assert_success
+    run diff -r tests-output/test-noconfig tests/sample-noconfig
+    assert_success
+}
+
+@test "support global values" {
     mkdir tests-output/test-global-values
     run output/kube-renderer.sh tests/test-global-values tests-output/test-global-values
     assert_success
     run diff -r tests-output/test-global-values tests/sample-global-values
+    assert_success
+}
+
+@test "support bootstrap rendering" {
+    mkdir tests-output/test-bootstrap
+    run output/kube-renderer.sh tests/test-bootstrap tests-output/test-bootstrap
+    assert_success
+    run diff -r tests-output/test-bootstrap tests/sample-bootstrap
     assert_success
 }
 
