@@ -15,7 +15,8 @@ Because of this some scenarios (especially system-level workload) uses pre-rende
 * [bats](https://github.com/bats-core/bats-core) - every tool needs some tests
 * [helm](https://helm.sh/) v3 - `helm` is the a hearth of helmfile and kube-renderer as well
 * [helmfile](https://github.com/roboll/helmfile) - kube-renderer is based on multi-functional tool `helmfile` and process its input and output
-* [kustomize](https://kustomize.io/) - `kustomize` is not only used by helmfile, but also is used as a unique filename generator
-* [yq](https://mikefarah.gitbook.io/yq/) v4 - `yq` is a multipurpose tool used for yaml files manipulation and as a alternative and customizable unique filename generator
+* [kustomize](https://kustomize.io/) - `kustomize` is not only used by helmfile, but also is used as an alternative unique filename generator
+* [yq](https://mikefarah.gitbook.io/yq/) v4 - `yq` is a multipurpose tool used for yaml files manipulation and as a customizable unique filename generator
+* [gomplate](https://gomplate.ca/) - `gomplate` is a go-templates engine used for pre-rendering any files, but mainly used when helmfile doesn't support templating
 
 Many thanks to authors of these tools.
