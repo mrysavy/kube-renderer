@@ -1,0 +1,6 @@
+# helmBinary: /home/mrysavy/data/Trask/tks/kube-renderer-helmfile/helm-internal
+releases:
+- name: test01
+  chart: ./source/plain01
+- name: test02
+  chart: ./source/plain01
