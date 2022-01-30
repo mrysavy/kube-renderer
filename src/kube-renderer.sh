@@ -12,6 +12,7 @@
 ##### * yq v4 (required)
 ##### * helm v3 (required)
 ##### * kustomize (required)
+##### * gomplate (optional)
 ################################################################################
 
 set -eu
@@ -36,22 +37,28 @@ function render {
         fi
     fi
 
+    local TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
+    cp -r "${SOURCE}" "${TMPDIR}/source"
+
     local INPUT=
     if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
-        INPUT="-f ${SOURCE}/helmfile.yaml"
+        INPUT="-f ${TMPDIR}/source/helmfile.yaml"
     elif [[ -d "${SOURCE}/helmfile.d" ]]; then
-        INPUT="-f ${SOURCE}/helmfile.d"
+        INPUT="-f ${TMPDIR}/source/helmfile.d"
     fi
 
-    local VALUES=
-    if [[ -f "${SOURCE}" ]]; then
-        VALUES="--state-values-file ${VALUES}"
-    fi
+    local STATE_VALUES=
+    if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
+        STATE_VALUES="--state-values-file ./values.yaml"
 
-    local TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
+        for FILE in $(find "${TMPDIR}/source" -type f -name '*.gotmpl'); do
+            gomplate -c .=<(yq eval '{ "Values": . }' "${TMPDIR}/source/values.yaml")?type=application/yaml -f "${FILE}" -o "${FILE%.gotmpl}"
+            rm "${FILE}"
+        done
+    fi
 
     # Output to plain file lost information about helm release
-    helmfile ${INPUT} ${VALUES} template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile ${INPUT} ${STATE_VALUES} template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     for APP in $(find "${TMPDIR}/helmfile/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/helmfile/||"); do
         mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/final/${APP}"

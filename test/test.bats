@@ -54,12 +54,12 @@ run_common_test() {
     run_common_test output-yq
 }
 
-@test "can render with yq-custom output" {
-    run_common_test output-yq-custom
+@test "can render with state values" {
+    run_common_test state-values
 }
 
-@test "can render crds with helm output" {
-    run_common_test crd-output-helm
+@test "can render with gomplate" {
+    run_common_test gomplate
 }
 
 teardown() {

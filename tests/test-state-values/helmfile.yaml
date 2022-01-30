@@ -1,0 +1,5 @@
+releases:
+- name: test01
+  chart: ./source/helm01
+  values:
+    - namespace: {{ .Values.ns }}
