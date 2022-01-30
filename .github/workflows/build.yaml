@@ -24,6 +24,11 @@ jobs:
       - name: Helm toolset install
         uses: hiberbee/github-action-helm@1.5.0
 
+      - name: Prepare
+        run: |
+          curl -s -L -o /usr/local/bin/gomplate https://github.com/hairyhenderson/gomplate/releases/download/v3.10.0/gomplate_linux-amd64 &&
+          chmod +x /usr/local/bin/gomplate
+
       - name: Build
         run: |
           make clean build
