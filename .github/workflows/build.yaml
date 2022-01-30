@@ -26,4 +26,8 @@ jobs:
 
       - name: Build
         run: |
-          make all
+          make clean build
+
+      - name: Test
+        run: |
+          make tests
