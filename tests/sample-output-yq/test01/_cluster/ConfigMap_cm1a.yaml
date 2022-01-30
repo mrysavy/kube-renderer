@@ -1,3 +1,5 @@
+# Source: plain01/templates/cm1.yaml
+# Source: plain01/templates/cm1.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2b

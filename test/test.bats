@@ -42,6 +42,10 @@ run_common_test() {
     run_common_test output-plain
 }
 
+@test "can render with helm output" {
+    run_common_test output-helm
+}
+
 @test "can render with kustomize output" {
     run_common_test output-kustomize
 }
@@ -52,6 +56,10 @@ run_common_test() {
 
 @test "can render with yq-custom output" {
     run_common_test output-yq-custom
+}
+
+@test "can render crds with helm output" {
+    run_common_test crd-output-helm
 }
 
 teardown() {

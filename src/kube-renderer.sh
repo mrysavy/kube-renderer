@@ -54,9 +54,32 @@ function render {
     helmfile ${INPUT} ${VALUES} template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     for APP in $(find "${TMPDIR}/helmfile/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/helmfile/||"); do
-        mkdir -p "${TMPDIR}/kustomize/${APP}" "${TMPDIR}/kustomized/${APP}" "${TMPDIR}/final/${APP}"
-        find ${TMPDIR}/helmfile/${APP}/ -type f | xargs yq eval '.' > "${TMPDIR}/kustomize/${APP}/resources.yaml"
-        cat >${TMPDIR}/kustomize/${APP}/kustomization.yaml <<EOF
+        mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/final/${APP}"
+        find ${TMPDIR}/helmfile/${APP}/ -type f | sort | xargs yq eval '.' > "${TMPDIR}/merged/${APP}/resources.yaml"
+
+        if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
+            mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
+            yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/merged/${APP}/resources.yaml"
+
+            if [[ "yq" != "${RENDER_FILENAME_GENERATOR}" ]]; then
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' | sort -n); do
+                    local RECONSTRUCTED="$(cat "${FILE}" | grep -m1 '# Source' | sed 's/# Source: //')"
+                    if [[ -n "${RECONSTRUCTED}" ]]; then
+                        mkdir -p $(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")
+                        touch "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}"
+                        yq eval -i '.' "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}" "${FILE}"
+                    else
+                        local NEWFILE="${FILE#${TMPDIR}/splitted/${APP}/}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
+                        cp "${FILE}" "${NEWFILE}"
+                    fi
+                done
+            fi
+
+            if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
+                mkdir -p "${TMPDIR}/kustomize/${APP}"
+
+                find "${TMPDIR}/reconstructed/${APP}/" -type f | sort | xargs yq eval '.' > "${TMPDIR}/kustomize/${APP}/resources.yaml"
+                cat > "${TMPDIR}/kustomize/${APP}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -64,20 +87,20 @@ resources:
 - resources.yaml
 EOF
 
-        if [[ -z "${RENDER_FILENAME_GENERATOR}" ]]; then
-            kustomize build "${TMPDIR}/kustomize/${APP}" > "${TMPDIR}/final/${APP}/${APP}.yaml"
-        else
-            kustomize build "${TMPDIR}/kustomize/${APP}" -o "${TMPDIR}/kustomized/${APP}/"
+                kustomize build "${TMPDIR}/kustomize/${APP}" -o "${TMPDIR}/final/${APP}/"
 
-            if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                cp -r "${TMPDIR}/kustomized/${APP}/"* "${TMPDIR}/final/${APP}/"
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                for FILE in $(find "${TMPDIR}/kustomized/${APP}/" -type f | sed "s|^${TMPDIR}/kustomized/${APP}/||"); do
-                    NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/kustomized/${APP}/${FILE}")
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f | sort | sed "s|^${TMPDIR}/splitted/${APP}/||"); do
+                    local NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
                     mkdir -p "$(dirname ${TMPDIR}/final/${APP}/${NEWFILE})"
-                    cp "${TMPDIR}/kustomized/${APP}/${FILE}" "${TMPDIR}/final/${APP}/${NEWFILE}"
+                    touch "${TMPDIR}/final/${APP}/${NEWFILE}"
+                    yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
                 done
+            elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
+                cp -r "${TMPDIR}/reconstructed/${APP}/"* "${TMPDIR}/final/${APP}/"
             fi
+        else
+            cp -r "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
         fi
     done
 

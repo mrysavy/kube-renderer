@@ -1,0 +1,11 @@
+# Source: TestChart/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a
+---
+# Source: TestChart/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2b
