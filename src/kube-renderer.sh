@@ -51,7 +51,7 @@ function render {
     local TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
 
     # Output to plain file lost information about helm release
-    helmfile ${INPUT} ${VALUES} template --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile ${INPUT} ${VALUES} template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     for APP in $(find "${TMPDIR}/helmfile/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/helmfile/||"); do
         mkdir -p "${TMPDIR}/kustomize/${APP}" "${TMPDIR}/kustomized/${APP}" "${TMPDIR}/final/${APP}"
