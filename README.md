@@ -13,9 +13,9 @@ Because of this some scenarios (especially system-level workload) uses pre-rende
 
 * [bash](https://www.gnu.org/software/bash/) - yes, this is written in `bash`
 * [bats](https://github.com/bats-core/bats-core) - every tool needs some tests
-* [helm](https://helm.sh/) - `helm` is the a hearth of helmfile and kube-renderer as well
+* [helm](https://helm.sh/) v3 - `helm` is the a hearth of helmfile and kube-renderer as well
 * [helmfile](https://github.com/roboll/helmfile) - kube-renderer is based on multi-functional tool `helmfile` and process its input and output
 * [kustomize](https://kustomize.io/) - `kustomize` is not only used by helmfile, but also is used as a unique filename generator
-* [yq](https://mikefarah.gitbook.io/yq/) - `yq` is a multipurpose tool used for yaml files manipulation and as a alternative and customizable unique filename generator
+* [yq](https://mikefarah.gitbook.io/yq/) v4 - `yq` is a multipurpose tool used for yaml files manipulation and as a alternative and customizable unique filename generator
 
 Many thanks to authors of these tools.

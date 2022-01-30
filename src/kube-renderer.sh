@@ -9,8 +9,8 @@
 ##### Requirements:
 ##### * bash (required)
 ##### * helmfile (required)
-##### * yq (required)
-##### * helm (required)
+##### * yq v4 (required)
+##### * helm v3 (required)
 ##### * kustomize (required)
 ################################################################################
 
