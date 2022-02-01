@@ -61,24 +61,18 @@ function render {
         find ${TMPDIR}/helmfile/${APP}/ -type f | sort | xargs yq eval '.' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
-            mkdir -p "${TMPDIR}/splitted/${APP}"
-            yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/merged/${APP}/resources.yaml"
-
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                mkdir -p "${TMPDIR}/kustomize/${APP}"
-
-                find "${TMPDIR}/splitted/${APP}/" -type f | sort | xargs yq eval '.' > "${TMPDIR}/kustomize/${APP}/resources.yaml"
-                cat > "${TMPDIR}/kustomize/${APP}/kustomization.yaml" <<EOF
+                cat > "${TMPDIR}/merged/${APP}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
 - resources.yaml
 EOF
-
-                kustomize build "${TMPDIR}/kustomize/${APP}" -o "${TMPDIR}/final/${APP}/"
-
+                kustomize build "${TMPDIR}/merged/${APP}" -o "${TMPDIR}/final/${APP}/"
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
+                mkdir -p "${TMPDIR}/splitted/${APP}"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/merged/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f | sort | sed "s|^${TMPDIR}/splitted/${APP}/||"); do
                     local NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
                     mkdir -p "$(dirname ${TMPDIR}/final/${APP}/${NEWFILE})"
@@ -86,7 +80,8 @@ EOF
                     yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
                 done
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                mkdir -p "${TMPDIR}/reconstructed/${APP}"
+                mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/merged/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' | sort -n); do
                     local RECONSTRUCTED="$(cat "${FILE}" | grep -m1 '# Source' | sed 's/# Source: //')"
                     if [[ -n "${RECONSTRUCTED}" ]]; then
