@@ -17,10 +17,6 @@
 
 set -eu
 
-function internal_helm {
-    echo $@
-}
-
 function render {
     local RENDER_FILENAME_GENERATOR=
     local RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
@@ -65,27 +61,13 @@ function render {
         find ${TMPDIR}/helmfile/${APP}/ -type f | sort | xargs yq eval '.' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
-            mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
+            mkdir -p "${TMPDIR}/splitted/${APP}"
             yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/merged/${APP}/resources.yaml"
-
-            if [[ "yq" != "${RENDER_FILENAME_GENERATOR}" ]]; then
-                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' | sort -n); do
-                    local RECONSTRUCTED="$(cat "${FILE}" | grep -m1 '# Source' | sed 's/# Source: //')"
-                    if [[ -n "${RECONSTRUCTED}" ]]; then
-                        mkdir -p $(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")
-                        touch "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}"
-                        yq eval -i '.' "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}" "${FILE}"
-                    else
-                        local NEWFILE="${FILE#${TMPDIR}/splitted/${APP}/}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
-                        cp "${FILE}" "${NEWFILE}"
-                    fi
-                done
-            fi
 
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/kustomize/${APP}"
 
-                find "${TMPDIR}/reconstructed/${APP}/" -type f | sort | xargs yq eval '.' > "${TMPDIR}/kustomize/${APP}/resources.yaml"
+                find "${TMPDIR}/splitted/${APP}/" -type f | sort | xargs yq eval '.' > "${TMPDIR}/kustomize/${APP}/resources.yaml"
                 cat > "${TMPDIR}/kustomize/${APP}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -104,6 +86,19 @@ EOF
                     yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
                 done
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
+                mkdir -p "${TMPDIR}/reconstructed/${APP}"
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' | sort -n); do
+                    local RECONSTRUCTED="$(cat "${FILE}" | grep -m1 '# Source' | sed 's/# Source: //')"
+                    if [[ -n "${RECONSTRUCTED}" ]]; then
+                        mkdir -p $(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")
+                        touch "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}"
+                        yq eval -i '.' "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}" "${FILE}"
+                    else
+                        local NEWFILE="${FILE#${TMPDIR}/splitted/${APP}/}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
+                        cp "${FILE}" "${NEWFILE}"
+                    fi
+                done
+
                 cp -r "${TMPDIR}/reconstructed/${APP}/"* "${TMPDIR}/final/${APP}/"
             fi
         else
