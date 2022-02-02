@@ -26,7 +26,7 @@ function internal_helm() {
     if [[ "version" == "$1" ]]; then
         exec "${HELMBINARY}" "$@"
     elif [[ "template" == "$1" ]]; then
-        local HELMOUTPUTDIR="$(echo "$@" | sed -E 's/.*--output-dir[=\ ](\S+).*/\1/')"
+        local HELMOUTPUTDIR; HELMOUTPUTDIR="$(echo "$@" | sed -E 's/.*--output-dir[=\ ](\S+).*/\1/')"
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
             "${HELMBINARY}" "$@"
 
@@ -43,10 +43,10 @@ function internal_helm() {
 
 function render {
     local RENDER_FILENAME_GENERATOR=
-    local RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
+    local RENDER_FILENAME_PATTERN; RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
     if [[ -f "${SOURCE}/kube-renderer.yaml" ]]; then
-        local RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator' "${SOURCE}/kube-renderer.yaml" | sed 's/null//')"
-        local RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern' "${SOURCE}/kube-renderer.yaml" | sed 's/null//')"
+        local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator' "${SOURCE}/kube-renderer.yaml" | sed 's/null//')"
+        local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern' "${SOURCE}/kube-renderer.yaml" | sed 's/null//')"
 
         if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
             RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
@@ -57,7 +57,7 @@ function render {
         fi
     fi
 
-    local TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
+    local TMPDIR; TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
     cp -r "${SOURCE}" "${TMPDIR}/source"
 
     local INPUT=
@@ -73,15 +73,15 @@ function render {
     if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
         STATE_VALUES="--state-values-file ./values.yaml"
 
-        for FILE in $(find "${TMPDIR}/source" -type f -name '*.gotmpl'); do
+        while IFS= read -r -d '' FILE; do
             gomplate -c .=<(yq eval '{ "Values": . }' "${TMPDIR}/source/values.yaml")?type=application/yaml -f "${FILE}" -o "${FILE%.gotmpl}"
             rm "${FILE}"
-        done
+        done < <(find "${TMPDIR}/source" -type f -name '*.gotmpl' -print0)
     fi
 
     cat > "${TMPDIR}/helm-internal" <<EOF
 #!/usr/bin/env bash
-exec "$(readlink -f $0)" --internal-helm "${HELMBINARY}" "\$@"
+exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "\$@"
 EOF
     chmod +x "${TMPDIR}/helm-internal"
 
@@ -90,7 +90,7 @@ EOF
 
     for APP in $(find "${TMPDIR}/helmfile/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/helmfile/||"); do
         mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/final/${APP}"
-        find ${TMPDIR}/helmfile/${APP}/ -type f | sort | xargs yq eval '.' > "${TMPDIR}/merged/${APP}/resources.yaml"
+        find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval '.' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
@@ -106,8 +106,8 @@ EOF
                 mkdir -p "${TMPDIR}/splitted/${APP}"
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/merged/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f | sort | sed "s|^${TMPDIR}/splitted/${APP}/||"); do
-                    local NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
-                    mkdir -p "$(dirname ${TMPDIR}/final/${APP}/${NEWFILE})"
+                    local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
+                    mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
                     touch "${TMPDIR}/final/${APP}/${NEWFILE}"
                     yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
                 done
@@ -115,9 +115,9 @@ EOF
                 mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/merged/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' | sort -n); do
-                    local RECONSTRUCTED="$(cat "${FILE}" | grep -m1 '# Source' | sed 's/# Source: //')"
+                    local RECONSTRUCTED; RECONSTRUCTED="$(grep -m1 '# Source' "${FILE}" | sed 's/# Source: //')"
                     if [[ -n "${RECONSTRUCTED}" ]]; then
-                        mkdir -p $(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")
+                        mkdir -p "$(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")"
                         touch "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}"
                         yq eval -i '.' "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}" "${FILE}"
                     else
