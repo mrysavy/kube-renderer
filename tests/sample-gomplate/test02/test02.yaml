@@ -1,13 +1,11 @@
 ---
 # Source: kust01/templates/kustomized.yaml
-# Source: kust01/templates/kustomized.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm1a
   namespace: testns
 ---
-# Source: kust01/templates/kustomized.yaml
 # Source: kust01/templates/kustomized.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -16,14 +14,12 @@ metadata:
   namespace: testns
 ---
 # Source: kust01/templates/kustomized.yaml
-# Source: kust01/templates/kustomized.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm2a
   namespace: testns
 ---
-# Source: kust01/templates/kustomized.yaml
 # Source: kust01/templates/kustomized.yaml
 apiVersion: v1
 kind: ConfigMap

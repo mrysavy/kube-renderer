@@ -38,6 +38,13 @@ run_common_test() {
     assert_failure 1
 }
 
+@test "not render while bad helm binary" {
+    mkdir "tests-output/test-bad-helmbinary"
+    run output/kube-renderer.sh "tests/test-bad-helmbinary" "tests-output/test-bad-helmbinary"
+    assert_failure 2
+    assert_output -p 'bad_helm3_binary: not found'
+}
+
 @test "can render with plain output" {
     run_common_test output-plain
 }

@@ -1,13 +1,11 @@
 ---
 # Source: plain01/templates/cm1.yaml
-# Source: plain01/templates/cm1.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm1a
   namespace: testns
 ---
-# Source: plain01/templates/cm1.yaml
 # Source: plain01/templates/cm1.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -16,14 +14,12 @@ metadata:
   namespace: testns
 ---
 # Source: plain01/templates/cm2.yaml
-# Source: plain01/templates/cm2.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm2a
   namespace: testns
 ---
-# Source: plain01/templates/cm2.yaml
 # Source: plain01/templates/cm2.yaml
 apiVersion: v1
 kind: ConfigMap

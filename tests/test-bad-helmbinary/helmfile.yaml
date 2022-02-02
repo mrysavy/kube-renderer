@@ -1,0 +1,7 @@
+helmBinary: bad_helm3_binary
+
+releases:
+  - name: test01
+    chart: ./source/plain01
+  - name: test02
+    chart: ./source/plain01

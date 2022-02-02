@@ -17,6 +17,30 @@
 
 set -eu
 
+function internal_helm() {
+    local HELMBINARY=$1; shift;
+    if [[ -z "${HELMBINARY}" ]]; then
+        HELMBINARY=helm
+    fi
+
+    if [[ "version" == "$1" ]]; then
+        exec "${HELMBINARY}" "$@"
+    elif [[ "template" == "$1" ]]; then
+        local HELMOUTPUTDIR="$(echo "$@" | sed -E 's/.*--output-dir[=\ ](\S+).*/\1/')"
+        if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
+            "${HELMBINARY}" "$@"
+
+            for FILE in $(find "${HELMOUTPUTDIR}/" -type f | sort | sed "s|^${HELMOUTPUTDIR}/||"); do
+                sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
+            done
+        else
+            exec "${HELMBINARY}" "$@"
+        fi
+    else
+        exec "${HELMBINARY}" "$@"
+    fi
+}
+
 function render {
     local RENDER_FILENAME_GENERATOR=
     local RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
@@ -37,8 +61,10 @@ function render {
     cp -r "${SOURCE}" "${TMPDIR}/source"
 
     local INPUT=
+    local HELMBINARY=
     if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
         INPUT="-f ${TMPDIR}/source/helmfile.yaml"
+        HELMBINARY="$(yq eval '.helmBinary' "${TMPDIR}/source/helmfile.yaml" | sed 's/null//')"
     elif [[ -d "${SOURCE}/helmfile.d" ]]; then
         INPUT="-f ${TMPDIR}/source/helmfile.d"
     fi
@@ -53,8 +79,14 @@ function render {
         done
     fi
 
+    cat > "${TMPDIR}/helm-internal" <<EOF
+#!/usr/bin/env bash
+exec "$(readlink -f $0)" --internal-helm "${HELMBINARY}" "\$@"
+EOF
+    chmod +x "${TMPDIR}/helm-internal"
+
     # Output to plain file lost information about helm release
-    helmfile ${INPUT} ${STATE_VALUES} template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     for APP in $(find "${TMPDIR}/helmfile/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/helmfile/||"); do
         mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/final/${APP}"
@@ -124,9 +156,10 @@ function parse_args {
     set +u
     while [ "$1" != "" ]; do
         case "$1" in
-            -V | --version )              version;                 exit;;
-            -h | --help )                 usage;                   exit;;
-            * )                           args+=("$1")             # others add to positional arguments
+            -V | --version )              version;                       exit;;
+            -h | --help )                 usage;                         exit;;
+            --internal-helm )             shift; internal_helm "$@";     exit;;
+            * )                           args+=("$1")                  # others add to positional arguments
         esac
         shift
     done
