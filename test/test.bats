@@ -45,6 +45,18 @@ run_common_test() {
     assert_output -p 'bad_helm3_binary: not found'
 }
 
+@test "can render plain manifests" {
+    run_common_test render-plain
+}
+
+@test "can render kustomize overlays" {
+    run_common_test render-kustomize
+}
+
+@test "can render helm charts" {
+    run_common_test render-helm
+}
+
 @test "can render with plain output" {
     run_common_test output-plain
 }

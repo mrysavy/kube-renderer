@@ -1,0 +1,24 @@
+---
+# Source: kust01/templates/kustomized.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1a
+---
+# Source: kust01/templates/kustomized.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1b
+---
+# Source: kust01/templates/kustomized.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a
+---
+# Source: kust01/templates/kustomized.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2b
