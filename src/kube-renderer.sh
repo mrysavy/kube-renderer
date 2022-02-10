@@ -133,8 +133,33 @@ EOF
         fi
     done
 
+    if [[ -f "${SOURCE}/bootstrap.yaml" ]]; then
+        bootstrap
+    fi
+
     cp -r "${TMPDIR}/final/"* "${TARGET}/"
+    cp -r "${TMPDIR}/bootstrap" "${TARGET}/_bootstrap"
     rm -rf "${TMPDIR}"
+}
+
+function bootstrap() {
+    local INPUT=
+    if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
+        INPUT="-f ${TMPDIR}/source/helmfile.yaml"
+    elif [[ -d "${SOURCE}/helmfile.d" ]]; then
+        INPUT="-f ${TMPDIR}/source/helmfile.d"
+    fi
+
+    mkdir -p "${TMPDIR}/bootstrap" "${TMPDIR}/bootstrap-values"
+    helmfile ${INPUT} write-values --output-file-template "${TMPDIR}/bootstrap-values/{{ .Release.Name }}.yaml"
+
+    yq eval -n '{ "Metadata": { "release": "bootstrap" } }' > "${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml"
+    for APP in $(find "${TMPDIR}/final/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/final/||"); do
+        yq eval -n '{ "Metadata": { "release": "'${APP}'" } }' > "${TMPDIR}/bootstrap-values/${APP}-metadata.yaml"
+        gomplate -c .=<(yq eval-all 'select(fileIndex == 0) * { "Values": select(fileIndex == 1) }' "${TMPDIR}/bootstrap-values/${APP}-metadata.yaml" "${TMPDIR}/bootstrap-values/${APP}.yaml")?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
+    done
+
+    gomplate -c .="${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml" -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/_bootstrap.yaml"
 }
 
 function usage {

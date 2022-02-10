@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test02
+data:
+  param1: value3
+  param2: value4
+

@@ -81,6 +81,10 @@ run_common_test() {
     run_common_test gomplate
 }
 
+@test "can render with bootstrap" {
+    run_common_test bootstrap
+}
+
 teardown() {
     rm -rf tests-output
 }

@@ -1,0 +1,11 @@
+releases:
+- name: test01
+  chart: ./source/helm01
+  values:
+    - param1: value1
+    - param2: value2
+- name: test02
+  chart: ./source/helm01
+  values:
+    - param1: value3
+    - param2: value4

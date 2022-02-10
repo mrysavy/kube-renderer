@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Metadata.release }}
+{{ if ne "bootstrap" .Metadata.release -}}
+data:
+  param1: {{ .Values.param1 }}
+  param2: {{ .Values.param2 }}
+{{ end }}
