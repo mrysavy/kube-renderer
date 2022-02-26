@@ -136,7 +136,7 @@ EOF
     cp -r "${TMPDIR}/final/"* "${TARGET}/"
     if [[ -f "${SOURCE}/bootstrap.yaml" ]]; then
         bootstrap
-        cp -r "${TMPDIR}/bootstrap" "${TARGET}/_bootstrap"
+        cp -r "${TMPDIR}/bootstrap" "${TARGET}/bootstrap"
     fi
     rm -rf "${TMPDIR}"
 }
@@ -158,7 +158,7 @@ function bootstrap() {
         gomplate -c .=<(yq eval-all 'select(fileIndex == 0) * { "Values": select(fileIndex == 1) }' "${TMPDIR}/bootstrap-values/${APP}-metadata.yaml" "${TMPDIR}/bootstrap-values/${APP}.yaml")?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
     done
 
-    gomplate -c .="${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml" -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/_bootstrap.yaml"
+    gomplate -c .="${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml" -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/bootstrap.yaml"
 }
 
 function usage {
