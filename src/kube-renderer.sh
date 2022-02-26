@@ -74,7 +74,7 @@ function render {
         STATE_VALUES="--state-values-file ./values.yaml"
 
         while IFS= read -r -d '' FILE; do
-            gomplate -c .=<(yq eval '{ "Values": . }' "${TMPDIR}/source/values.yaml")?type=application/yaml -f "${FILE}" -o "${FILE%.gotmpl}"
+            gomplate -c .=<(yq eval '{ "Values": . }' "${TMPDIR}/source/values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.gotmpl}"    # newer yq version consumes stdin even when input file is specified
             rm "${FILE}"
         done < <(find "${TMPDIR}/source" -type f -name '*.gotmpl' -print0)
     fi
@@ -133,12 +133,11 @@ EOF
         fi
     done
 
+    cp -r "${TMPDIR}/final/"* "${TARGET}/"
     if [[ -f "${SOURCE}/bootstrap.yaml" ]]; then
         bootstrap
+        cp -r "${TMPDIR}/bootstrap" "${TARGET}/_bootstrap"
     fi
-
-    cp -r "${TMPDIR}/final/"* "${TARGET}/"
-    cp -r "${TMPDIR}/bootstrap" "${TARGET}/_bootstrap"
     rm -rf "${TMPDIR}"
 }
 
