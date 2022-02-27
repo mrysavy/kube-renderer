@@ -1,8 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Metadata.release }}
-{{ if ne "bootstrap" .Metadata.release -}}
+  name: {{ .Metadata.name }}
+  namespace: {{ if has .Metadata "namespace" }}{{ .Metadata.namespace | default "bootstrap" }}{{ else }}bootstrap{{ end }}
+{{ if ne "bootstrap" .Metadata.name -}}
 data:
   param1: {{ .Values.param1 }}
   param2: {{ .Values.param2 }}

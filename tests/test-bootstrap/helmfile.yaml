@@ -5,6 +5,12 @@ releases:
     - param1: value1
     - param2: value2
 - name: test02
+  namespace: namespace
+  chart: ./source/helm01
+  values:
+    - param1: value1
+    - param2: value2
+- name: test03
   chart: ./source/TestChart
   values:
     - param1: value3

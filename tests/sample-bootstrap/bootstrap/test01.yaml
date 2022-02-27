@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test01
+  namespace: bootstrap
 data:
   param1: value1
   param2: value2

@@ -2,7 +2,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: test02
+  namespace: namespace
 data:
-  param1: value3
-  param2: value4
+  param1: value1
+  param2: value2
 
