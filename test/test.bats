@@ -81,6 +81,10 @@ run_common_test() {
     run_common_test gomplate
 }
 
+@test "can render with yq output custom" {
+    run_common_test output-yq-custom
+}
+
 @test "can render with bootstrap" {
     run_common_test bootstrap
 }
