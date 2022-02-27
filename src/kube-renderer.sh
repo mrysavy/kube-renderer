@@ -15,7 +15,7 @@
 ##### * gomplate (optional)
 ################################################################################
 
-set -eu
+set -eu -o pipefail
 
 function internal_helm() {
     local HELMBINARY=$1; shift;
@@ -90,7 +90,7 @@ EOF
 
     for APP in $(find "${TMPDIR}/helmfile/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/helmfile/||"); do
         mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/final/${APP}"
-        find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval '.' > "${TMPDIR}/merged/${APP}/resources.yaml"
+        find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then

@@ -1,0 +1,6 @@
+# Source: TestChart/templates/cm1.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1b
+  namespace: testns

@@ -2,4 +2,12 @@ releases:
 - name: test01
   chart: ./source/plain01
 - name: test02
-  chart: ./source/plain01
+  chart: ./source/helm01
+- name: test03
+  chart: ./source/TestChart
+  transformers:
+  - apiVersion: builtin
+    kind: NamespaceTransformer
+    metadata:
+      name: not-important
+      namespace: transformed
