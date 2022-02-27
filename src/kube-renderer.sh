@@ -57,7 +57,6 @@ function render {
         fi
     fi
 
-    local TMPDIR; TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
     cp -r "${SOURCE}" "${TMPDIR}/source"
 
     local INPUT=
@@ -138,7 +137,6 @@ EOF
         bootstrap
         cp -r "${TMPDIR}/bootstrap" "${TARGET}/bootstrap"
     fi
-    rm -rf "${TMPDIR}"
 }
 
 function bootstrap() {
@@ -213,4 +211,11 @@ function parse_args {
 }
 
 parse_args "$@"
+
+TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
+trap 'rm -rf -- "$TMPDIR"' EXIT
+mkdir "${TMPDIR}/helmfile-temp" "${TMPDIR}/helmfile-temp-chartify"
+export HELMFILE_TEMPDIR="${TMPDIR}/helmfile-temp"
+export CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify"
+
 render
