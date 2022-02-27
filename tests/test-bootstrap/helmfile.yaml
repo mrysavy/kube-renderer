@@ -5,7 +5,13 @@ releases:
     - param1: value1
     - param2: value2
 - name: test02
-  chart: ./source/helm01
+  chart: ./source/TestChart
   values:
     - param1: value3
     - param2: value4
+  transformers:
+    - apiVersion: builtin
+      kind: NamespaceTransformer
+      metadata:
+        name: not-important
+        namespace: transformed

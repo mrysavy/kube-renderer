@@ -148,7 +148,7 @@ function bootstrap() {
     fi
 
     mkdir -p "${TMPDIR}/bootstrap" "${TMPDIR}/bootstrap-values"
-    helmfile ${INPUT} write-values --output-file-template "${TMPDIR}/bootstrap-values/{{ .Release.Name }}.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/bootstrap-temp-chartify" helmfile ${INPUT} write-values --output-file-template "${TMPDIR}/bootstrap-values/{{ .Release.Name }}.yaml"
 
     yq eval -n '{ "Metadata": { "release": "bootstrap" } }' > "${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml"
     for APP in $(find "${TMPDIR}/final/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/final/||"); do
