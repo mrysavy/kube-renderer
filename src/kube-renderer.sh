@@ -38,14 +38,22 @@ function internal_helm() {
             fi
         fi
 
+        local ARG_NO_HOOKS=
+        if [[ -n "${RENDER_CONFIG}" ]]; then
+            local NO_HOOKS=$(yq eval '.no_hooks[] | select(. == "'"${APP}"'")' "${RENDER_CONFIG}")
+            if [[ -n "${NO_HOOKS}" ]]; then
+                ARG_NO_HOOKS="--no-hooks"
+            fi
+        fi
+
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
-            "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@"
+            "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@" ${ARG_NO_HOOKS}
 
             for FILE in $(find "${HELMOUTPUTDIR}/" -type f | sort | sed "s|^${HELMOUTPUTDIR}/||"); do
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
             done
         else
-            exec "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@"
+            exec "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@" ${ARG_NO_HOOKS}
         fi
     else
         exec "${HELMBINARY}" "$@"
