@@ -45,6 +45,17 @@ run_common_test() {
     assert_output -p 'bad_helm3_binary: not found'
 }
 
+@test "can render with specified kube version" {
+    run_common_test kube-version-ok
+}
+
+@test "not render when different kube version requirements" {
+    mkdir "tests-output/test-kube-version-ko"
+    run output/kube-renderer.sh "tests/test-kube-version-ko" "tests-output/test-kube-version-ko"
+    assert_failure 1
+    assert_output -p 'Error: chart requires kubeVersion: 1.16.0 which is incompatible with Kubernetes'
+}
+
 @test "can render plain manifests" {
     run_common_test render-plain
 }

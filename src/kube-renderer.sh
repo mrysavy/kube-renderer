@@ -22,19 +22,30 @@ function internal_helm() {
     if [[ -z "${HELMBINARY}" ]]; then
         HELMBINARY=helm
     fi
+    local RENDER_CONFIG=$1; shift;
 
     if [[ "version" == "$1" ]]; then
         exec "${HELMBINARY}" "$@"
     elif [[ "template" == "$1" ]]; then
         local HELMOUTPUTDIR; HELMOUTPUTDIR="$(echo "$@" | sed -E 's/.*--output-dir[=\ ](\S+).*/\1/')"
+        local APP; APP="$(echo "$@" | sed -E 's/template(\ --\S+)*\ (\S+)\ .*/\2/')"
+
+        local ARG_KUBE_VERSION=
+        if [[ -n "${RENDER_CONFIG}" ]]; then
+            local KUBE_VERSION=$(yq eval ".kube_version.${APP}" "${RENDER_CONFIG}" | sed 's/null//')
+            if [[ -n "${KUBE_VERSION}" ]]; then
+                ARG_KUBE_VERSION="--kube-version ${KUBE_VERSION}"
+            fi
+        fi
+
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
-            "${HELMBINARY}" "$@"
+            "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@"
 
             for FILE in $(find "${HELMOUTPUTDIR}/" -type f | sort | sed "s|^${HELMOUTPUTDIR}/||"); do
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
             done
         else
-            exec "${HELMBINARY}" "$@"
+            exec "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@"
         fi
     else
         exec "${HELMBINARY}" "$@"
@@ -80,7 +91,7 @@ function render {
 
     cat > "${TMPDIR}/helm-internal" <<EOF
 #!/usr/bin/env bash
-exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "\$@"
+exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${RENDER_CONFIG}" "\$@"
 EOF
     chmod +x "${TMPDIR}/helm-internal"
 
@@ -165,8 +176,8 @@ function bootstrap() {
     fi
 
     mkdir -p "${TMPDIR}/bootstrap" "${TMPDIR}/bootstrap-values" "${TMPDIR}/bootstrap-states"
-    CHARTIFY_TEMPDIR="${TMPDIR}/bootstrap-values-temp-chartify" helmfile ${INPUT} write-values --output-file-template "${TMPDIR}/bootstrap-values/{{ .Release.Name }}.yaml"
-    CHARTIFY_TEMPDIR="${TMPDIR}/bootstrap-build-temp-chartify" helmfile ${INPUT} build | yq eval '.releases[]' -s '"'"${TMPDIR}/bootstrap-values/"'" + .name + "-metadata.yaml"'
+    CHARTIFY_TEMPDIR="${TMPDIR}/bootstrap-values-temp-chartify" helmfile ${INPUT} --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/bootstrap-values/{{ .Release.Name }}.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/bootstrap-build-temp-chartify" helmfile ${INPUT} --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/bootstrap-values/"'" + .name + "-metadata.yaml"'
 
     yq eval -n '{ "Metadata": { "name": "bootstrap" } }' > "${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml"
     for APP in $(find "${TMPDIR}/final/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/final/||"); do
@@ -230,7 +241,7 @@ function parse_args {
 parse_args "$@"
 
 RENDER_CONFIG="${SOURCE}/kube-renderer.yaml"
-[[ -f "${RENDER_CONFIG}" ]] || RENDER_CONFIG=""
+[[ -f "${RENDER_CONFIG}" ]] && RENDER_CONFIG=$(readlink -f ${RENDER_CONFIG}) || RENDER_CONFIG=""
 
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
 trap 'rm -rf -- "$TMPDIR"' EXIT
