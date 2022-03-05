@@ -104,6 +104,10 @@ run_common_test() {
     run_common_test helm-transformer-hooks
 }
 
+@test "can render with kustomize postrenderer" {
+    run_common_test postrenderer-kustomize
+}
+
 teardown() {
     rm -rf tests-output
 }
