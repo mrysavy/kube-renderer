@@ -133,7 +133,7 @@ EOF
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/splitted/${APP}"
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/postrendered/${APP}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f | sort | sed "s|^${TMPDIR}/splitted/${APP}/||"); do
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort); do
                     local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
                     mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
                     touch "${TMPDIR}/final/${APP}/${NEWFILE}"
@@ -142,7 +142,8 @@ EOF
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/postrendered/${APP}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' | sort -n); do
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
+                    FILE="${TMPDIR}/splitted/${APP}/${FILE}"
                     local RECONSTRUCTED; RECONSTRUCTED="$(grep -m1 '# Source' "${FILE}" | sed 's/# Source: //')"
                     if [[ -n "${RECONSTRUCTED}" ]]; then
                         mkdir -p "$(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")"
