@@ -3,3 +3,8 @@ releases:
   chart: ./source/plain01
 - name: test02
   chart: ./source/plain01
+environments:
+  default:
+    values:
+    - .kube-renderer:
+        render_filename_generator: helm

@@ -11,3 +11,8 @@ releases:
     metadata:
       name: not-important
       namespace: transformed
+environments:
+  default:
+    values:
+    - .kube-renderer:
+        render_filename_generator: yq

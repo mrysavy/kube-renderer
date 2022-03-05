@@ -1,3 +1,0 @@
-render_filename_generator: yq
-render_filename_pattern: |
-  (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"

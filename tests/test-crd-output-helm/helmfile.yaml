@@ -1,3 +1,8 @@
 releases:
 - name: test01
   chart: ./source/helm01
+environments:
+  default:
+    values:
+    - .kube-renderer:
+        render_filename_generator: helm

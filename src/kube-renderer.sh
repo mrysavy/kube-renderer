@@ -22,7 +22,7 @@ function internal_helm() {
     if [[ -z "${HELMBINARY}" ]]; then
         HELMBINARY=helm
     fi
-    local RENDER_CONFIG=$1; shift;
+    local TMPDIR=$1; shift;
 
     if [[ "version" == "$1" ]]; then
         exec "${HELMBINARY}" "$@"
@@ -31,16 +31,16 @@ function internal_helm() {
         local APP; APP="$(echo "$@" | sed -E 's/template(\ --\S+)*\ (\S+)\ .*/\2/')"
 
         local ARG_KUBE_VERSION=
-        if [[ -n "${RENDER_CONFIG}" ]]; then
-            local KUBE_VERSION=$(yq eval ".kube_version.${APP}" "${RENDER_CONFIG}" | sed 's/null//')
+        if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
+            local KUBE_VERSION=$(yq eval ".kube_version.${APP}" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
             if [[ -n "${KUBE_VERSION}" ]]; then
                 ARG_KUBE_VERSION="--kube-version ${KUBE_VERSION}"
             fi
         fi
 
         local ARG_NO_HOOKS=
-        if [[ -n "${RENDER_CONFIG}" ]]; then
-            local NO_HOOKS=$(yq eval '.no_hooks[] | select(. == "'"${APP}"'")' "${RENDER_CONFIG}")
+        if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
+            local NO_HOOKS=$(yq eval '.no_hooks[] | select(. == "'"${APP}"'")' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             if [[ -n "${NO_HOOKS}" ]]; then
                 ARG_NO_HOOKS="--no-hooks"
             fi
@@ -83,21 +83,6 @@ function internal_helm() {
 }
 
 function render {
-    local RENDER_FILENAME_GENERATOR=
-    local RENDER_FILENAME_PATTERN; RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
-    if [[ -f "${RENDER_CONFIG}" ]]; then
-        local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator' "${RENDER_CONFIG}" | sed 's/null//')"
-        local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern' "${RENDER_CONFIG}" | sed 's/null//')"
-
-        if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
-            RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
-        fi
-
-        if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
-            RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
-        fi
-    fi
-
     cp -r "${SOURCE}" "${TMPDIR}/source"
 
     local INPUT=
@@ -111,7 +96,7 @@ function render {
 
     cat > "${TMPDIR}/helm-internal" <<EOF
 #!/usr/bin/env bash
-exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${RENDER_CONFIG}" "\$@"
+exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${TMPDIR}" "\$@"
 EOF
     chmod +x "${TMPDIR}/helm-internal"
 
@@ -137,6 +122,19 @@ EOF
         yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | .".kube-renderer"'      "${TMPDIR}/helmfile-values/global.yaml" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$//' > "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml"
     done
 
+    local RENDER_FILENAME_GENERATOR=
+    local RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
+    local RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
+    local RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
+
+    if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
+        RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
+    fi
+
+    if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
+        RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
+    fi
+
     # Output to single plain stdout lost information about helm release
     helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
@@ -145,8 +143,8 @@ EOF
         find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
         local POSTRENDERER_TYPE=""
-        if [[ -n "${RENDER_CONFIG}" ]]; then
-            POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.${APP}.type" "${RENDER_CONFIG}" | sed 's/null//')
+        if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
+            POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.${APP}.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
         fi
 
         case "${POSTRENDERER_TYPE}" in
@@ -206,7 +204,7 @@ EOF
 function postrender_kustomize {
     local APP=$1; shift
 
-    yq eval '.helm_postrenderer.'"${APP}"'.data' "${RENDER_CONFIG}" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/merged/${APP}/resources.yaml"'"' - > "${TMPDIR}/merged/${APP}/kustomization.yaml"
+    yq eval '.helm_postrenderer.'"${APP}"'.data' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/merged/${APP}/resources.yaml"'"' - > "${TMPDIR}/merged/${APP}/kustomization.yaml"
     kustomize build "${TMPDIR}/merged/${APP}" > "${TMPDIR}/postrendered/${APP}/resources.yaml"
 }
 
@@ -272,9 +270,6 @@ function parse_args {
 }
 
 parse_args "$@"
-
-RENDER_CONFIG="${SOURCE}/kube-renderer.yaml"
-[[ -f "${RENDER_CONFIG}" ]] && RENDER_CONFIG=$(readlink -f ${RENDER_CONFIG}) || RENDER_CONFIG=""
 
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
 trap 'rm -rf -- "$TMPDIR"' EXIT
