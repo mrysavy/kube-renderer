@@ -1,0 +1,32 @@
+---
+# Source: TestChart/templates/patched_resources_hooks.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    helm.sh/hook: post-delete
+  name: cm2a
+  namespace: transformed
+---
+# Source: TestChart/templates/patched_resources_hooks.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    helm.sh/hook: post-delete
+  name: cm2b
+  namespace: transformed
+---
+# Source: TestChart/templates/patched_resources_res.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1a
+  namespace: transformed
+---
+# Source: TestChart/templates/patched_resources_res.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1b
+  namespace: transformed
