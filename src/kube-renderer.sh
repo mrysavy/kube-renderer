@@ -109,6 +109,12 @@ function render {
         INPUT="-f ${TMPDIR}/source/helmfile.d"
     fi
 
+    cat > "${TMPDIR}/helm-internal" <<EOF
+#!/usr/bin/env bash
+exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${RENDER_CONFIG}" "\$@"
+EOF
+    chmod +x "${TMPDIR}/helm-internal"
+
     local STATE_VALUES=
     if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
         STATE_VALUES="--state-values-file ./values.yaml"
@@ -119,11 +125,13 @@ function render {
         done < <(find "${TMPDIR}/source" -type f -name '*.gotmpl' -print0)
     fi
 
-    cat > "${TMPDIR}/helm-internal" <<EOF
-#!/usr/bin/env bash
-exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${RENDER_CONFIG}" "\$@"
-EOF
-    chmod +x "${TMPDIR}/helm-internal"
+    mkdir -p "${TMPDIR}/helmfile-values"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/global.yaml"
+    rm -rf "${TMPDIR}/helmfile-temp-chartify"
+
+    yq eval -n '{ "name": "bootstrap" }' > "${TMPDIR}/helmfile-values/bootstrap-metadata.yaml"
 
     # Output to single plain stdout lost information about helm release
     helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
@@ -199,23 +207,13 @@ function postrender_kustomize {
 }
 
 function bootstrap() {
-    local INPUT=
-    if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
-        INPUT="-f ${TMPDIR}/source/helmfile.yaml"
-    elif [[ -d "${SOURCE}/helmfile.d" ]]; then
-        INPUT="-f ${TMPDIR}/source/helmfile.d"
-    fi
+    mkdir -p "${TMPDIR}/bootstrap"
 
-    mkdir -p "${TMPDIR}/bootstrap" "${TMPDIR}/bootstrap-values" "${TMPDIR}/bootstrap-states"
-    CHARTIFY_TEMPDIR="${TMPDIR}/bootstrap-values-temp-chartify" helmfile ${INPUT} --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/bootstrap-values/{{ .Release.Name }}.yaml"
-    CHARTIFY_TEMPDIR="${TMPDIR}/bootstrap-build-temp-chartify" helmfile ${INPUT} --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/bootstrap-values/"'" + .name + "-metadata.yaml"'
-
-    yq eval -n '{ "Metadata": { "name": "bootstrap" } }' > "${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml"
     for APP in $(find "${TMPDIR}/final/" -mindepth 1 -maxdepth 1 -type d | sed "s|^${TMPDIR}/final/||"); do
-        gomplate -c .=<(yq eval-all '{ "Metadata": select(fileIndex == 0) } * { "Values": select(fileIndex == 1) }' "${TMPDIR}/bootstrap-values/${APP}-metadata.yaml.yml" "${TMPDIR}/bootstrap-values/${APP}.yaml")?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
+        gomplate -c .=<(yq eval-all '{ "Metadata": select(fileIndex == 0) } * { "Values": select(fileIndex == 1) }' "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml" "${TMPDIR}/helmfile-values/${APP}.yaml")?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
     done
 
-    gomplate -c .="${TMPDIR}/bootstrap-values/bootstrap-metadata.yaml" -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/bootstrap.yaml"
+    gomplate -c .=<(yq eval-all '{ "Metadata": select(fileIndex == 0) } * { "Global": select(fileIndex == 1) }' "${TMPDIR}/helmfile-values/bootstrap-metadata.yaml" "${TMPDIR}/helmfile-values/global.yaml")?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/bootstrap.yaml"
 }
 
 function usage {
