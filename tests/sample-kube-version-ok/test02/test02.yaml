@@ -1,0 +1,7 @@
+---
+# Source: TestChart/templates/patched_resources.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1
+  namespace: transformered

@@ -31,11 +31,10 @@ function internal_helm() {
         local APP; APP="$(echo "$@" | sed -E 's/template(\ --\S+)*\ (\S+)\ .*/\2/')"
 
         local ARG_KUBE_VERSION=
-        if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
-            local KUBE_VERSION=$(yq eval ".kube_version.${APP}" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
-            if [[ -n "${KUBE_VERSION}" ]]; then
-                ARG_KUBE_VERSION="--kube-version ${KUBE_VERSION}"
-            fi
+        if [[ -f "${TMPDIR}/source/kubeversion-${APP}" ]]; then
+            ARG_KUBE_VERSION="--kube-version $(cat ${TMPDIR}/source/kubeversion-${APP})"
+        elif [[ -f "${TMPDIR}/source/kubeversion" ]]; then
+            ARG_KUBE_VERSION="--kube-version $(cat ${TMPDIR}/source/kubeversion)"
         fi
 
         local ARG_NO_HOOKS=

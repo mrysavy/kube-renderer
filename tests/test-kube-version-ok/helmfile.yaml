@@ -1,9 +1,11 @@
 releases:
 - name: test01
-  chart: ./source/helm01
-environments:
-  default:
-    values:
-      - .kube-renderer:
-          kube_version:
-            test01: v1.16
+  chart: ./source/TestChart2
+- name: test02
+  chart: ./source/TestChart
+  transformers:
+  - apiVersion: builtin
+    kind: NamespaceTransformer
+    metadata:
+      name: not-important
+      namespace: transformered
