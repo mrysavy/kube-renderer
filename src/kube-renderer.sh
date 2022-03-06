@@ -30,6 +30,8 @@ function internal_helm() {
         local HELMOUTPUTDIR; HELMOUTPUTDIR="$(echo "$@" | sed -E 's/.*--output-dir[=\ ](\S+).*/\1/')"
         local APP; APP="$(echo "$@" | sed -E 's/template(\ --\S+)*\ (\S+)\ .*/\2/')"
 
+        local HELMSOURCEDIR; HELMSOURCEDIR="$(echo "$@" | sed -E 's/^.*template\ +'"${APP}"'\ +(\S+).*$/\1/')"
+
         local ARG_KUBE_VERSION=
         if [[ -f "${TMPDIR}/source/kubeversion-${APP}" ]]; then
             ARG_KUBE_VERSION="--kube-version $(cat ${TMPDIR}/source/kubeversion-${APP})"
@@ -52,26 +54,26 @@ function internal_helm() {
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
             done
         else
-            if yq eval -e 'select(.metadata.annotations."helm.sh/hook" != "*")' "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources.yaml" && yq eval -e 'select(.metadata.annotations."helm.sh/hook" == "*")' "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources.yaml"; then
-                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_res.yaml|'   "${CHARTIFY_TEMPDIR}/${APP}/templates/patched_resources.yaml" > "${CHARTIFY_TEMPDIR}/${APP}/templates/patched_resources_res.yaml"
-                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_hooks.yaml|' "${CHARTIFY_TEMPDIR}/${APP}/templates/patched_resources.yaml" > "${CHARTIFY_TEMPDIR}/${APP}/templates/patched_resources_hooks.yaml"
+            if yq eval -e 'select(.metadata.annotations."helm.sh/hook" != "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null && yq eval -e 'select(.metadata.annotations."helm.sh/hook" == "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null; then
+                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_res.yaml|'   "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
+                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_hooks.yaml|' "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_hooks.yaml"
 
                 mkdir \
-                    "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_res" \
-                    "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_hooks"
+                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res" \
+                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
 
-                yq eval 'select(.metadata.annotations."helm.sh/hook" != "*")' -s '"'"${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_res/"'"   + $index' "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources.yaml"
-                yq eval 'select(.metadata.annotations."helm.sh/hook" == "*")' -s '"'"${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_hooks/"'" + $index' "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources.yaml"
+                yq eval 'select(.metadata.annotations."helm.sh/hook" != "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"'"   + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
+                yq eval 'select(.metadata.annotations."helm.sh/hook" == "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/"'" + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
 
-                find "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_res/"   -type f -printf "%f\n" | sort -n | sed "s|^|${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_res/|"   | xargs yq eval 'select(length!=0)' <(echo -n '') > "${CHARTIFY_TEMPDIR}/${APP}/templates/patched_resources_res.yaml"
-                find "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_hooks/" -type f -printf "%f\n" | sort -n | sed "s|^|${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_hooks/|" | xargs yq eval 'select(length!=0)' <(echo -n '') > "${CHARTIFY_TEMPDIR}/${APP}/templates/patched_resources_hooks.yaml"
+                find "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"   -type f -printf "%f\n" | sort -n | sed "s|^|${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/|"   | xargs yq eval 'select(length!=0)' <(echo -n '') > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
+                find "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/" -type f -printf "%f\n" | sort -n | sed "s|^|${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/|" | xargs yq eval 'select(length!=0)' <(echo -n '') > "${HELMSOURCEDIR}/templates/patched_resources_hooks.yaml"
 
                 rm -f \
-                    "${CHARTIFY_TEMPDIR}/${APP}/templates/patched_resources.yaml" \
-                    "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources.yaml"
+                    "${HELMSOURCEDIR}/templates/patched_resources.yaml" \
+                    "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
                 rm -rf \
-                    "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_res" \
-                    "${CHARTIFY_TEMPDIR}/${APP}/files/templates/patched_resources_temp_hooks"
+                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res" \
+                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
             fi
 
             exec "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@" ${ARG_NO_HOOKS}
