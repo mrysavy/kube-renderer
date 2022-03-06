@@ -39,7 +39,7 @@ function internal_helm() {
 
         local ARG_NO_HOOKS=
         if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
-            local NO_HOOKS=$(yq eval '.no_hooks[] | select(. == "'"${APP}"'")' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            local NO_HOOKS=$(yq eval '.flags[] | select(. == "nohooks")' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             if [[ -n "${NO_HOOKS}" ]]; then
                 ARG_NO_HOOKS="--no-hooks"
             fi
@@ -143,7 +143,7 @@ EOF
 
         local POSTRENDERER_TYPE=""
         if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
-            POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.${APP}.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
         fi
 
         case "${POSTRENDERER_TYPE}" in
@@ -203,7 +203,7 @@ EOF
 function postrender_kustomize {
     local APP=$1; shift
 
-    yq eval '.helm_postrenderer.'"${APP}"'.data' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/merged/${APP}/resources.yaml"'"' - > "${TMPDIR}/merged/${APP}/kustomization.yaml"
+    yq eval '.helm_postrenderer.data' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/merged/${APP}/resources.yaml"'"' - > "${TMPDIR}/merged/${APP}/kustomization.yaml"
     kustomize build "${TMPDIR}/merged/${APP}" > "${TMPDIR}/postrendered/${APP}/resources.yaml"
 }
 
