@@ -142,11 +142,7 @@ EOF
         mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/final/${APP}"
         find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
-        local POSTRENDERER_TYPE=""
-        if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
-            POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
-        fi
-
+        local POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
         case "${POSTRENDERER_TYPE}" in
             "kustomize" ) postrender_kustomize "${APP}";;
             * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
