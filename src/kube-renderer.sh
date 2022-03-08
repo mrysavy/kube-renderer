@@ -106,9 +106,9 @@ EOF
         STATE_VALUES="--state-values-file ./values.yaml"
 
         while IFS= read -r -d '' FILE; do
-            gomplate -c .=<(yq eval '{ "Values": . }' "${TMPDIR}/source/values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.gotmpl}"    # newer yq version consumes stdin even when input file is specified
+            gomplate -c .=<(yq eval '{ "Values": . }' "${TMPDIR}/source/values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
             rm "${FILE}"
-        done < <(find "${TMPDIR}/source" -type f -name '*.gotmpl' -print0)
+        done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
     fi
 
     mkdir -p "${TMPDIR}/helmfile-values"
