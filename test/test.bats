@@ -108,6 +108,10 @@ run_common_test() {
     run_common_test postrenderer-kustomize
 }
 
+@test "can render with releases merging" {
+    run_common_test merge-releases
+}
+
 teardown() {
     rm -rf tests-output
 }

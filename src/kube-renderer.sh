@@ -139,7 +139,12 @@ EOF
     helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/global.yaml"); do
-        mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/final/${APP}"
+        local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+        if [[ -z "${TARGET_RELEASE}" ]]; then
+            TARGET_RELEASE="${APP}"
+        fi
+
+        mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${TARGET_RELEASE}" "${TMPDIR}/final/${TARGET_RELEASE}"
         find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
         local POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
@@ -148,45 +153,55 @@ EOF
             * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
         esac
 
+        if [[ ! -f "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" ]]; then
+            cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+        else
+            yq eval "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml" > "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp"
+            mv "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+        fi
+    done
+
+    for TARGET_RELEASE in "${TMPDIR}/combined/"*; do
+        TARGET_RELEASE="${TARGET_RELEASE#${TMPDIR}/combined/}"
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                cat > "${TMPDIR}/postrendered/${APP}/kustomization.yaml" <<EOF
+                cat > "${TMPDIR}/combined/${TARGET_RELEASE}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
 - resources.yaml
 EOF
-                kustomize build "${TMPDIR}/postrendered/${APP}" -o "${TMPDIR}/final/${APP}/"
+                kustomize build "${TMPDIR}/combined/${TARGET_RELEASE}" -o "${TMPDIR}/final/${TARGET_RELEASE}/"
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                mkdir -p "${TMPDIR}/splitted/${APP}"
-                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/postrendered/${APP}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort); do
-                    local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
-                    mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
-                    touch "${TMPDIR}/final/${APP}/${NEWFILE}"
-                    yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
+                mkdir -p "${TMPDIR}/splitted/${TARGET_RELEASE}"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${TARGET_RELEASE}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+                for FILE in $(find "${TMPDIR}/splitted/${TARGET_RELEASE}/" -type f -printf "%f\n" | sort); do
+                    local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${TARGET_RELEASE}/${FILE}")
+                    mkdir -p "$(dirname "${TMPDIR}/final/${TARGET_RELEASE}/${NEWFILE}")"
+                    touch "${TMPDIR}/final/${TARGET_RELEASE}/${NEWFILE}"
+                    yq eval -i '.' "${TMPDIR}/final/${TARGET_RELEASE}/${NEWFILE}" "${TMPDIR}/splitted/${TARGET_RELEASE}/${FILE}"
                 done
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
-                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/postrendered/${APP}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
-                    FILE="${TMPDIR}/splitted/${APP}/${FILE}"
+                mkdir -p "${TMPDIR}/splitted/${TARGET_RELEASE}" "${TMPDIR}/reconstructed/${TARGET_RELEASE}"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${TARGET_RELEASE}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+                for FILE in $(find "${TMPDIR}/splitted/${TARGET_RELEASE}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
+                    FILE="${TMPDIR}/splitted/${TARGET_RELEASE}/${FILE}"
                     local RECONSTRUCTED; RECONSTRUCTED="$(grep -m1 '# Source' "${FILE}" | sed 's/# Source: //')"
                     if [[ -n "${RECONSTRUCTED}" ]]; then
-                        mkdir -p "$(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")"
-                        touch "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}"
-                        yq eval -i '.' "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}" "${FILE}"
+                        mkdir -p "$(dirname "${TMPDIR}/reconstructed/${TARGET_RELEASE}/${RECONSTRUCTED}")"
+                        touch "${TMPDIR}/reconstructed/${TARGET_RELEASE}/${RECONSTRUCTED}"
+                        yq eval -i '.' "${TMPDIR}/reconstructed/${TARGET_RELEASE}/${RECONSTRUCTED}" "${FILE}"
                     else
-                        local NEWFILE="${FILE#${TMPDIR}/splitted/${APP}/}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
+                        local NEWFILE="${FILE#${TMPDIR}/splitted/${TARGET_RELEASE}/}"; NEWFILE="${TMPDIR}/reconstructed/${TARGET_RELEASE}/${NEWFILE%.yml}"
                         cp "${FILE}" "${NEWFILE}"
                     fi
                 done
 
-                cp -r "${TMPDIR}/reconstructed/${APP}/"* "${TMPDIR}/final/${APP}/"
+                cp -r "${TMPDIR}/reconstructed/${TARGET_RELEASE}/"* "${TMPDIR}/final/${TARGET_RELEASE}/"
             fi
         else
-            cp -r "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
+            cp -r "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" "${TMPDIR}/final/${TARGET_RELEASE}/${TARGET_RELEASE}.yaml"
         fi
     done
 

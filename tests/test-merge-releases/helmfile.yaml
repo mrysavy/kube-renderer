@@ -1,0 +1,8 @@
+releases:
+- name: test01
+  chart: ./source/plain01
+- name: test02
+  chart: ./source/plain02
+  values:
+  - .kube-renderer:
+      target_release: test01
