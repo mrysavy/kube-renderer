@@ -223,13 +223,20 @@ function bootstrap() {
     mkdir -p "${TMPDIR}/bootstrap"
 
     for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/global.yaml"); do
-        gomplate \
-            -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
-                <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml") \
-                <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/${APP}-values.yaml") \
-                <(yq eval -n '{ "Global": {} }') \
-                <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml") \
-                )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
+        local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+        if [[ -z "${TARGET_RELEASE}" ]]; then
+            TARGET_RELEASE="${APP}"
+        fi
+
+        if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
+            gomplate \
+                -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
+                    <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml") \
+                    <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/${APP}-values.yaml") \
+                    <(yq eval -n '{ "Global": {} }') \
+                    <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml") \
+                    )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
+        fi
     done
 
     gomplate \
