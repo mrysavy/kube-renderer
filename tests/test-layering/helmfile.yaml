@@ -1,0 +1,9 @@
+environments:
+  default:
+    values:
+      - .kube-renderer:
+          render_filename_generator: yq
+
+bases:
+- test01.yaml
+- test02.yaml

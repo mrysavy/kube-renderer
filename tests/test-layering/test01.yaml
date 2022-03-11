@@ -1,0 +1,3 @@
+releases:
+- name: test01
+  chart: ./source/plain01

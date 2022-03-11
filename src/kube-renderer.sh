@@ -114,12 +114,16 @@ EOF
     mkdir -p "${TMPDIR}/helmfile-values"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/global.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
     rm -rf "${TMPDIR}/helmfile-temp-chartify"
 
-    for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/global.yaml"); do
-        yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | del(.".kube-renderer")' "${TMPDIR}/helmfile-values/global.yaml" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$//' > "${TMPDIR}/helmfile-values/${APP}-values.yaml"
-        yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | .".kube-renderer"'      "${TMPDIR}/helmfile-values/global.yaml" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$//' > "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml"
+    yq eval-all -N -s '"'"${TMPDIR}/helmfile-values/global-"'" + $index' "${TMPDIR}/helmfile-values/globals.yaml"
+
+    for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
+        for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
+            yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | del(.".kube-renderer")' "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/${APP}-values.yaml"
+            yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | .".kube-renderer"'      "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml"
+        done
     done
 
     local RENDER_FILENAME_GENERATOR=
@@ -138,27 +142,29 @@ EOF
     # Output to single plain stdout lost information about helm release
     helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
-    for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/global.yaml"); do
-        local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
-        if [[ -z "${TARGET_RELEASE}" ]]; then
-            TARGET_RELEASE="${APP}"
-        fi
+    for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
+        for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
+            local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            if [[ -z "${TARGET_RELEASE}" ]]; then
+                TARGET_RELEASE="${APP}"
+            fi
 
-        mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${TARGET_RELEASE}" "${TMPDIR}/final/${TARGET_RELEASE}"
-        find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
+            mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${TARGET_RELEASE}" "${TMPDIR}/final/${TARGET_RELEASE}"
+            find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
-        local POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
-        case "${POSTRENDERER_TYPE}" in
-            "kustomize" ) postrender_kustomize "${APP}";;
-            * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
-        esac
+            local POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            case "${POSTRENDERER_TYPE}" in
+                "kustomize" ) postrender_kustomize "${APP}";;
+                * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
+            esac
 
-        if [[ ! -f "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" ]]; then
-            cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
-        else
-            yq eval "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml" > "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp"
-            mv "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
-        fi
+            if [[ ! -f "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" ]]; then
+                cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+            else
+                yq eval "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml" > "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp"
+                mv "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+            fi
+        done
     done
 
     for TARGET_RELEASE in "${TMPDIR}/combined/"*; do
@@ -222,28 +228,28 @@ function postrender_kustomize {
 function bootstrap() {
     mkdir -p "${TMPDIR}/bootstrap"
 
-    for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/global.yaml"); do
-        local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
-        if [[ -z "${TARGET_RELEASE}" ]]; then
-            TARGET_RELEASE="${APP}"
-        fi
+    for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
+        for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
+            local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            if [[ -z "${TARGET_RELEASE}" ]]; then
+                TARGET_RELEASE="${APP}"
+            fi
 
-        if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
-            gomplate \
-                -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
-                    <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml") \
-                    <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/${APP}-values.yaml") \
-                    <(yq eval -n '{ "Global": {} }') \
-                    <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml") \
-                    )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
-        fi
+            if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
+                gomplate \
+                    -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
+                        <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml") \
+                        <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/${APP}-values.yaml") \
+                        <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml") \
+                        )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
+            fi
+        done
     done
 
     gomplate \
         -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
             <(yq eval -n '{ "Metadata": { "name": "bootstrap" } }') \
             <(yq eval -n '{ "Values": {} }') \
-            <(yq eval    '{ "Global": {} }' "${TMPDIR}/helmfile-values/global.yaml") \
             <(yq eval -n '{ "Kuberenderer": {} }') \
             )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/bootstrap.yaml"
 }

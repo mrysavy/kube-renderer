@@ -112,6 +112,14 @@ run_common_test() {
     run_common_test merge-releases
 }
 
+@test "can render multiple input files" {
+    run_common_test multiple-inputs
+}
+
+@test "can render with layering" {
+    run_common_test layering
+}
+
 teardown() {
     rm -rf tests-output
 }

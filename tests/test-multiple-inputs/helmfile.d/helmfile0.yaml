@@ -1,0 +1,5 @@
+environments:
+  default:
+    values:
+      - .kube-renderer:
+          render_filename_generator: yq
