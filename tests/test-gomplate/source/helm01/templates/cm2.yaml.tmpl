@@ -2,10 +2,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm2a
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .StateValues.namespace }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm2b
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .StateValues.namespace }}
