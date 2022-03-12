@@ -1,0 +1,22 @@
+releases:
+- name: test01
+  chart: ./source/plain01
+  values:
+  - .kube-renderer:
+      target_dir: base/test01
+- name: test01a
+  chart: ./source/plain02
+  values:
+  - .kube-renderer:
+      target_dir: ignore
+      target_release: test01
+- name: test02
+  chart: ./source/plain01
+  values:
+  - .kube-renderer:
+      target_dir: base/test02
+- name: test02a
+  chart: ./source/plain02
+  values:
+  - .kube-renderer:
+      target_release: test02

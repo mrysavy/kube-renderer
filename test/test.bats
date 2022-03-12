@@ -120,6 +120,10 @@ run_common_test() {
     run_common_test layering
 }
 
+@test "can render with release subdirs" {
+    run_common_test release-subdir
+}
+
 teardown() {
     rm -rf tests-output
 }

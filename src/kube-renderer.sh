@@ -142,14 +142,23 @@ EOF
     # Output to single plain stdout lost information about helm release
     helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
+    declare -A RELEASES
+    declare -A DIRS
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
             local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
             if [[ -z "${TARGET_RELEASE}" ]]; then
                 TARGET_RELEASE="${APP}"
-            fi
 
-            mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${TARGET_RELEASE}" "${TMPDIR}/final/${TARGET_RELEASE}"
+                local TARGET_DIR=$(yq eval ".target_dir" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+                if [[ -z "${TARGET_DIR}" ]]; then
+                    TARGET_DIR="${TARGET_RELEASE}"
+                fi
+                DIRS["${APP}"]="${TARGET_DIR}"
+            fi
+            RELEASES["${APP}"]="${TARGET_RELEASE}"
+
+            mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/final/${APP}"
             find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
             local POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
@@ -158,62 +167,68 @@ EOF
                 * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
             esac
 
-            if [[ ! -f "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" ]]; then
-                cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+            if [[ ! -f "${TMPDIR}/combined/${APP}/resources.yaml" ]]; then
+                cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${APP}/resources.yaml"
             else
-                yq eval "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml" > "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp"
-                mv "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml.tmp" "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
+                yq eval "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml" > "${TMPDIR}/combined/${APP}/resources.yaml.tmp"
+                mv "${TMPDIR}/combined/${APP}/resources.yaml.tmp" "${TMPDIR}/combined/${APP}/resources.yaml"
             fi
         done
     done
 
-    for TARGET_RELEASE in "${TMPDIR}/combined/"*; do
-        TARGET_RELEASE="${TARGET_RELEASE#${TMPDIR}/combined/}"
+    for APP in "${!RELEASES[@]}"; do
+        APP="${APP#${TMPDIR}/combined/}"
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                cat > "${TMPDIR}/combined/${TARGET_RELEASE}/kustomization.yaml" <<EOF
+                cat > "${TMPDIR}/combined/${APP}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
 - resources.yaml
 EOF
-                kustomize build "${TMPDIR}/combined/${TARGET_RELEASE}" -o "${TMPDIR}/final/${TARGET_RELEASE}/"
+                kustomize build "${TMPDIR}/combined/${APP}" -o "${TMPDIR}/final/${APP}/"
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                mkdir -p "${TMPDIR}/splitted/${TARGET_RELEASE}"
-                yq eval -N -s '("'"${TMPDIR}/splitted/${TARGET_RELEASE}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${TARGET_RELEASE}/" -type f -printf "%f\n" | sort); do
-                    local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${TARGET_RELEASE}/${FILE}")
-                    mkdir -p "$(dirname "${TMPDIR}/final/${TARGET_RELEASE}/${NEWFILE}")"
-                    touch "${TMPDIR}/final/${TARGET_RELEASE}/${NEWFILE}"
-                    yq eval -i '.' "${TMPDIR}/final/${TARGET_RELEASE}/${NEWFILE}" "${TMPDIR}/splitted/${TARGET_RELEASE}/${FILE}"
+                mkdir -p "${TMPDIR}/splitted/${APP}"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${APP}/resources.yaml"
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort); do
+                    local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
+                    mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
+                    touch "${TMPDIR}/final/${APP}/${NEWFILE}"
+                    yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
                 done
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                mkdir -p "${TMPDIR}/splitted/${TARGET_RELEASE}" "${TMPDIR}/reconstructed/${TARGET_RELEASE}"
-                yq eval -N -s '("'"${TMPDIR}/splitted/${TARGET_RELEASE}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${TARGET_RELEASE}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
-                    FILE="${TMPDIR}/splitted/${TARGET_RELEASE}/${FILE}"
+                mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${APP}/resources.yaml"
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
+                    FILE="${TMPDIR}/splitted/${APP}/${FILE}"
                     local RECONSTRUCTED; RECONSTRUCTED="$(grep -m1 '# Source' "${FILE}" | sed 's/# Source: //')"
                     if [[ -n "${RECONSTRUCTED}" ]]; then
-                        mkdir -p "$(dirname "${TMPDIR}/reconstructed/${TARGET_RELEASE}/${RECONSTRUCTED}")"
-                        touch "${TMPDIR}/reconstructed/${TARGET_RELEASE}/${RECONSTRUCTED}"
-                        yq eval -i '.' "${TMPDIR}/reconstructed/${TARGET_RELEASE}/${RECONSTRUCTED}" "${FILE}"
+                        mkdir -p "$(dirname "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}")"
+                        touch "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}"
+                        yq eval -i '.' "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}" "${FILE}"
                     else
-                        local NEWFILE="${FILE#${TMPDIR}/splitted/${TARGET_RELEASE}/}"; NEWFILE="${TMPDIR}/reconstructed/${TARGET_RELEASE}/${NEWFILE%.yml}"
+                        local NEWFILE="${FILE#${TMPDIR}/splitted/${APP}/}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
                         cp "${FILE}" "${NEWFILE}"
                     fi
                 done
 
-                cp -r "${TMPDIR}/reconstructed/${TARGET_RELEASE}/"* "${TMPDIR}/final/${TARGET_RELEASE}/"
+                cp -r "${TMPDIR}/reconstructed/${APP}/"* "${TMPDIR}/final/${APP}/"
             fi
         else
-            cp -r "${TMPDIR}/combined/${TARGET_RELEASE}/resources.yaml" "${TMPDIR}/final/${TARGET_RELEASE}/${TARGET_RELEASE}.yaml"
+            cp -r "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
         fi
     done
 
-    cp -r "${TMPDIR}/final/"* "${TARGET}/"
+    for APP in "${!RELEASES[@]}"; do
+        local TARGET_RELEASE=${RELEASES["${APP}"]}
+        local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
+        mkdir -p "${TARGET}/${TARGET_DIR}"
+        cp -r "${TMPDIR}/final/${APP}/"* "${TARGET}/${TARGET_DIR}/"
+    done
+
     if [[ -f "${SOURCE}/bootstrap.yaml" ]]; then
-        bootstrap
+        bootstrap RELEASES DIRS
         cp -r "${TMPDIR}/bootstrap" "${TARGET}/bootstrap"
     fi
 }
@@ -230,10 +245,8 @@ function bootstrap() {
 
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
-            local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
-            if [[ -z "${TARGET_RELEASE}" ]]; then
-                TARGET_RELEASE="${APP}"
-            fi
+            local TARGET_RELEASE=${RELEASES["${APP}"]}
+            local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
 
             if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
                 gomplate \
@@ -241,7 +254,7 @@ function bootstrap() {
                         <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml") \
                         <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/${APP}-values.yaml") \
                         <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml") \
-                        )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${APP}.yaml"
+                        )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${TARGET_DIR}.yaml"
             fi
         done
     done
