@@ -253,7 +253,7 @@ function bootstrap() {
             local TARGET_RELEASE=${RELEASES["${APP}"]}
             local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
 
-            mkdir -p "$(dirname ${TMPDIR}/bootstrap/${TARGET_DIR})"
+            mkdir -p $(dirname "${TMPDIR}/bootstrap/${TARGET_DIR}")
 
             if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
                 gomplate \

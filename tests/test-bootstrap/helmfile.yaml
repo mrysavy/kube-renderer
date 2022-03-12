@@ -4,17 +4,23 @@ releases:
   values:
     - param1: value1
     - param2: value2
+    - .kube-renderer:
+        target_dir: part1/test01
 - name: test02
   namespace: namespace
   chart: ./source/helm01
   values:
     - param1: value1
     - param2: value2
+    - .kube-renderer:
+        target_dir: part1/test02
 - name: test03
   chart: ./source/TestChart
   values:
     - param1: value3
     - param2: value4
+    - .kube-renderer:
+        target_dir: part2/test03
   transformers:
     - apiVersion: builtin
       kind: NamespaceTransformer
