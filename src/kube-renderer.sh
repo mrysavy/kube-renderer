@@ -96,7 +96,7 @@ function render {
     local HELMBINARY=
     if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
         INPUT=("-f" "${TMPDIR}/source/helmfile.yaml")
-        HELMBINARY="$(yq eval '.helmBinary' "${TMPDIR}/source/helmfile.yaml" | sed 's/null//')"
+        HELMBINARY="$(yq eval '.helmBinary // ""' "${TMPDIR}/source/helmfile.yaml")"
     elif [[ -d "${SOURCE}/helmfile.d" ]]; then
         INPUT=("-f" "${TMPDIR}/source/helmfile.d")
     fi
@@ -138,8 +138,8 @@ EOF
     local RENDER_FILENAME_GENERATOR=
     # shellcheck disable=SC2016
     local RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
-    local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
-    local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
+    local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")"
+    local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")"
 
     if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
         RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
@@ -155,17 +155,17 @@ EOF
     declare -A RELEASES
     declare -A DIRS
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
-        local HELMFILE_DIR; HELMFILE_DIR=$(yq eval '.renderedvalues.".kube-renderer".helmfile_dir' "${TMPDIR}/helmfile-values/${GLOBAL}" | sed 's/null//')
+        local HELMFILE_DIR; HELMFILE_DIR=$(yq eval '.renderedvalues.".kube-renderer".helmfile_dir // ""' "${TMPDIR}/helmfile-values/${GLOBAL}")
         if [[ -z "${HELMFILE_DIR}" ]]; then
             HELMFILE_DIR="."
         fi
 
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
-            local TARGET_RELEASE; TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            local TARGET_RELEASE; TARGET_RELEASE=$(yq eval '.target_release // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             if [[ -z "${TARGET_RELEASE}" ]]; then
                 TARGET_RELEASE="${APP}"
 
-                local TARGET_DIR; TARGET_DIR=$(yq eval ".target_dir" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+                local TARGET_DIR; TARGET_DIR=$(yq eval '.target_dir // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
                 if [[ -z "${TARGET_DIR}" ]]; then
                     TARGET_DIR="${TARGET_RELEASE}"
                 fi
@@ -176,7 +176,7 @@ EOF
             mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/final/${APP}"
             find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
-            local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             case "${POSTRENDERER_TYPE}" in
                 "kustomize" ) postrender_kustomize "${APP}";;
                 * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
