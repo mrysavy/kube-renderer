@@ -1,9 +1,15 @@
+SUITE:='.*'
+
 .PHONY: tests
 
-all: clean build tests
+all: clean build tests_all
+suite: clean build tests
+
+tests_all:
+	test/bats/bin/bats test/test.bats
 
 tests:
-	test/bats/bin/bats test/test.bats
+	test/bats/bin/bats test/test.bats -f $(SUITE)
 
 build:
 	mkdir -p output
