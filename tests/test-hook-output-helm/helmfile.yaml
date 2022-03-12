@@ -6,13 +6,13 @@ releases:
     values:
     - .kube-renderer:
         flags:
-          crds: false
+          hooks: false
   - name: test03
     chart: ./source/helm01
     values:
     - .kube-renderer:
         flags:
-          crds: true
+          hooks: true
 environments:
   default:
     values:

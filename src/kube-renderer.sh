@@ -39,16 +39,20 @@ function internal_helm() {
             ARG_KUBE_VERSION=("--kube-version" "$(cat "${TMPDIR}/source/kubeversion")")
         fi
 
-        local ARG_NO_HOOKS=
+        local ARGS=()
         if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
-            local NO_HOOKS; NO_HOOKS=$(yq eval '.flags[] | select(. == "nohooks")' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
-            if [[ -n "${NO_HOOKS}" ]]; then
-                ARG_NO_HOOKS="--no-hooks"
+            local HOOKS; HOOKS=$(yq eval '.flags.hooks // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            if [[ ! "${HOOKS}" == "true" ]]; then
+                ARGS+=("--no-hooks")
+            fi
+            local CRDS; CRDS=$(yq eval '.flags.crds == false | not' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            if [[ ! "${CRDS}" == "false" ]]; then
+                ARGS+=("--include-crds")
             fi
         fi
 
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
-            "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" ${ARG_NO_HOOKS}
+            "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" "${ARGS[@]}"
 
             for FILE in $(find "${HELMOUTPUTDIR}/" -type f | sort | sed "s|^${HELMOUTPUTDIR}/||"); do
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
@@ -78,7 +82,7 @@ function internal_helm() {
                     "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
             fi
 
-            exec "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" ${ARG_NO_HOOKS}
+            exec "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" "${ARGS[@]}"
         fi
     else
         exec "${HELMBINARY}" "$@"
@@ -146,7 +150,7 @@ EOF
     fi
 
     # Output to single plain stdout lost information about helm release
-    helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" template --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     declare -A RELEASES
     declare -A DIRS

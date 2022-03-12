@@ -1,0 +1,15 @@
+# Source: TestChart/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a
+  annotations:
+    helm.sh/hook: post-delete
+---
+# Source: TestChart/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2b
+  annotations:
+    helm.sh/hook: post-delete

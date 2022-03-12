@@ -124,6 +124,14 @@ run_common_test() {
     run_common_test release-subdir
 }
 
+@test "can render with crds" {
+    run_common_test crd-output-helm
+}
+
+@test "can render with hooks" {
+    run_common_test hook-output-helm
+}
+
 teardown() {
     rm -rf tests-output
 }

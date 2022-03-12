@@ -7,3 +7,7 @@ releases:
       metadata:
         name: not-important
         namespace: transformed
+  values:
+    - .kube-renderer:
+        flags:
+          hooks: true
