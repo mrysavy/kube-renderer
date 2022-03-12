@@ -32,23 +32,23 @@ function internal_helm() {
 
         local HELMSOURCEDIR; HELMSOURCEDIR="$(echo "$@" | sed -E 's/^.*template\ +'"${APP}"'\ +(\S+).*$/\1/')"
 
-        local ARG_KUBE_VERSION=
+        local ARG_KUBE_VERSION=()
         if [[ -f "${TMPDIR}/source/kubeversion-${APP}" ]]; then
-            ARG_KUBE_VERSION="--kube-version $(cat ${TMPDIR}/source/kubeversion-${APP})"
+            ARG_KUBE_VERSION=("--kube-version" "$(cat "${TMPDIR}/source/kubeversion-${APP}")")
         elif [[ -f "${TMPDIR}/source/kubeversion" ]]; then
-            ARG_KUBE_VERSION="--kube-version $(cat ${TMPDIR}/source/kubeversion)"
+            ARG_KUBE_VERSION=("--kube-version" "$(cat "${TMPDIR}/source/kubeversion")")
         fi
 
         local ARG_NO_HOOKS=
         if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
-            local NO_HOOKS=$(yq eval '.flags[] | select(. == "nohooks")' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            local NO_HOOKS; NO_HOOKS=$(yq eval '.flags[] | select(. == "nohooks")' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             if [[ -n "${NO_HOOKS}" ]]; then
                 ARG_NO_HOOKS="--no-hooks"
             fi
         fi
 
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
-            "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@" ${ARG_NO_HOOKS}
+            "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" ${ARG_NO_HOOKS}
 
             for FILE in $(find "${HELMOUTPUTDIR}/" -type f | sort | sed "s|^${HELMOUTPUTDIR}/||"); do
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
@@ -62,7 +62,9 @@ function internal_helm() {
                     "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res" \
                     "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
 
+                # shellcheck disable=SC2016
                 yq eval 'select(.metadata.annotations."helm.sh/hook" != "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"'"   + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
+                # shellcheck disable=SC2016
                 yq eval 'select(.metadata.annotations."helm.sh/hook" == "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/"'" + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
 
                 find "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"   -type f -printf "%f\n" | sort -n | sed "s|^|${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/|"   | xargs yq eval 'select(length!=0)' <(echo -n '') > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
@@ -76,7 +78,7 @@ function internal_helm() {
                     "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
             fi
 
-            exec "${HELMBINARY}" ${ARG_KUBE_VERSION} "$@" ${ARG_NO_HOOKS}
+            exec "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" ${ARG_NO_HOOKS}
         fi
     else
         exec "${HELMBINARY}" "$@"
@@ -86,13 +88,13 @@ function internal_helm() {
 function render {
     cp -r "${SOURCE}" "${TMPDIR}/source"
 
-    local INPUT=
+    local INPUT=()
     local HELMBINARY=
     if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
-        INPUT="-f ${TMPDIR}/source/helmfile.yaml"
+        INPUT=("-f" "${TMPDIR}/source/helmfile.yaml")
         HELMBINARY="$(yq eval '.helmBinary' "${TMPDIR}/source/helmfile.yaml" | sed 's/null//')"
     elif [[ -d "${SOURCE}/helmfile.d" ]]; then
-        INPUT="-f ${TMPDIR}/source/helmfile.d"
+        INPUT=("-f" "${TMPDIR}/source/helmfile.d")
     fi
 
     cat > "${TMPDIR}/helm-internal" <<EOF
@@ -101,9 +103,9 @@ exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${TMPDIR}" "\$@"
 EOF
     chmod +x "${TMPDIR}/helm-internal"
 
-    local STATE_VALUES=
+    local STATE_VALUES=()
     if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
-        STATE_VALUES="--state-values-file ./values.yaml"
+        STATE_VALUES=("--state-values-file" "./values.yaml")
 
         while IFS= read -r -d '' FILE; do
             gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/source/values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
@@ -112,24 +114,28 @@ EOF
     fi
 
     mkdir -p "${TMPDIR}/helmfile-values"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
     rm -rf "${TMPDIR}/helmfile-temp-chartify"
 
+    # shellcheck disable=SC2016
     yq eval-all -N -s '"'"${TMPDIR}/helmfile-values/global-"'" + $index' "${TMPDIR}/helmfile-values/globals.yaml"
 
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
+            # shellcheck disable=SC2016
             yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | del(.".*")'        "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/${APP}-values.yaml"
+            # shellcheck disable=SC2016
             yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | .".kube-renderer"' "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml"
         done
     done
 
     local RENDER_FILENAME_GENERATOR=
+    # shellcheck disable=SC2016
     local RENDER_FILENAME_PATTERN='(.metadata.namespace // "_cluster") + "/" + (.kind // "_unknown") + (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) + "_" + (.metadata.name // "_unknown") + ".yaml"'
-    local RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
-    local RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
+    local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
+    local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')"
 
     if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
         RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
@@ -140,22 +146,22 @@ EOF
     fi
 
     # Output to single plain stdout lost information about helm release
-    helmfile ${INPUT} ${STATE_VALUES} --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" template --include-crds --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     declare -A RELEASES
     declare -A DIRS
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
-        local HELMFILE_DIR=$(yq eval '.renderedvalues.".kube-renderer".helmfile_dir' "${TMPDIR}/helmfile-values/${GLOBAL}" | sed 's/null//')
+        local HELMFILE_DIR; HELMFILE_DIR=$(yq eval '.renderedvalues.".kube-renderer".helmfile_dir' "${TMPDIR}/helmfile-values/${GLOBAL}" | sed 's/null//')
         if [[ -z "${HELMFILE_DIR}" ]]; then
             HELMFILE_DIR="."
         fi
 
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
-            local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            local TARGET_RELEASE; TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
             if [[ -z "${TARGET_RELEASE}" ]]; then
                 TARGET_RELEASE="${APP}"
 
-                local TARGET_DIR=$(yq eval ".target_dir" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+                local TARGET_DIR; TARGET_DIR=$(yq eval ".target_dir" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
                 if [[ -z "${TARGET_DIR}" ]]; then
                     TARGET_DIR="${TARGET_RELEASE}"
                 fi
@@ -166,7 +172,7 @@ EOF
             mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/final/${APP}"
             find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
-            local POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
+            local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval ".helm_postrenderer.type" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
             case "${POSTRENDERER_TYPE}" in
                 "kustomize" ) postrender_kustomize "${APP}";;
                 * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
@@ -195,6 +201,7 @@ EOF
                 kustomize build "${TMPDIR}/combined/${APP}" -o "${TMPDIR}/final/${APP}/"
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/splitted/${APP}"
+                # shellcheck disable=SC2016
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort); do
                     local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
@@ -204,6 +211,7 @@ EOF
                 done
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
+                # shellcheck disable=SC2016
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
                     FILE="${TMPDIR}/splitted/${APP}/${FILE}"
@@ -253,9 +261,10 @@ function bootstrap() {
             local TARGET_RELEASE=${RELEASES["${APP}"]}
             local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
 
-            mkdir -p $(dirname "${TMPDIR}/bootstrap/${TARGET_DIR}")
+            mkdir -p "$(dirname "${TMPDIR}/bootstrap/${TARGET_DIR}")"
 
             if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
+                # shellcheck disable=SC2016
                 gomplate \
                     -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
                         <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml") \
@@ -266,6 +275,7 @@ function bootstrap() {
         done
     done
 
+    # shellcheck disable=SC2016
     gomplate \
         -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
             <(yq eval -n '{ "Metadata": { "name": "bootstrap" } }') \
