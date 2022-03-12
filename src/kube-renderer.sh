@@ -145,6 +145,11 @@ EOF
     declare -A RELEASES
     declare -A DIRS
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
+        local HELMFILE_DIR=$(yq eval '.renderedvalues.".kube-renderer".helmfile_dir' "${TMPDIR}/helmfile-values/${GLOBAL}" | sed 's/null//')
+        if [[ -z "${HELMFILE_DIR}" ]]; then
+            HELMFILE_DIR="."
+        fi
+
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
             local TARGET_RELEASE=$(yq eval ".target_release" "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | sed 's/null//')
             if [[ -z "${TARGET_RELEASE}" ]]; then
@@ -154,7 +159,7 @@ EOF
                 if [[ -z "${TARGET_DIR}" ]]; then
                     TARGET_DIR="${TARGET_RELEASE}"
                 fi
-                DIRS["${APP}"]="${TARGET_DIR}"
+                DIRS["${APP}"]="${HELMFILE_DIR}/${TARGET_DIR}"
             fi
             RELEASES["${APP}"]="${TARGET_RELEASE}"
 
@@ -228,7 +233,7 @@ EOF
     done
 
     if [[ -f "${SOURCE}/bootstrap.yaml" ]]; then
-        bootstrap RELEASES DIRS
+        bootstrap
         cp -r "${TMPDIR}/bootstrap" "${TARGET}/bootstrap"
     fi
 }
@@ -247,6 +252,8 @@ function bootstrap() {
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
             local TARGET_RELEASE=${RELEASES["${APP}"]}
             local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
+
+            mkdir -p "$(dirname ${TMPDIR}/bootstrap/${TARGET_DIR})"
 
             if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
                 gomplate \

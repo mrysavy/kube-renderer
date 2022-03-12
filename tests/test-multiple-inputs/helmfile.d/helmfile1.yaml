@@ -1,3 +1,8 @@
 releases:
 - name: test01
   chart: ./../source/plain01
+environments:
+  default:
+    values:
+      - .kube-renderer:
+          helmfile_dir: helmfile01
