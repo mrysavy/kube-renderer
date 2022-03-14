@@ -117,10 +117,15 @@ EOF
         done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
     fi
 
+    local PARTIAL=()
+    if [[ -n "${SELECTOR}" ]]; then
+        PARTIAL=("--selector" "${SELECTOR}")
+    fi
+
     mkdir -p "${TMPDIR}/helmfile-values"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
     rm -rf "${TMPDIR}/helmfile-temp-chartify"
 
     # shellcheck disable=SC2016
@@ -150,7 +155,7 @@ EOF
     fi
 
     # Output to single plain stdout lost information about helm release
-    helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" --helm-binary "${TMPDIR}/helm-internal" template --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" template --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     declare -A RELEASES
     declare -A DIRS
@@ -161,6 +166,9 @@ EOF
         fi
 
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
+            if [[ -n "${SELECTOR}" && ! -d "${TMPDIR}/helmfile/${APP}" ]]; then
+                continue
+            fi
             local TARGET_RELEASE; TARGET_RELEASE=$(yq eval '.target_release // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             if [[ -z "${TARGET_RELEASE}" ]]; then
                 TARGET_RELEASE="${APP}"
@@ -244,7 +252,7 @@ EOF
         cp -r "${TMPDIR}/final/${APP}/"* "${TARGET}/${TARGET_DIR}/"
     done
 
-    if [[ -f "${SOURCE}/bootstrap.yaml" ]]; then
+    if [[ -z "${SELECTOR}" && -f "${SOURCE}/bootstrap.yaml" ]]; then
         bootstrap
         cp -r "${TMPDIR}/bootstrap" "${TARGET}/bootstrap"
     fi
@@ -289,8 +297,9 @@ function bootstrap() {
 }
 
 function usage {
-    echo "usage: kube-renderer.sh SOURCE TARGET [-Vh]"
+    echo "usage: kube-renderer.sh SOURCE TARGET [-Vh] [-l <selector>]"
     echo "   ";
+    echo "  -l | --selector          : Partial render based on helmfile selector";
     echo "  -V | --version           : Print version info";
     echo "  -h | --help              : This message";
 }
@@ -307,6 +316,7 @@ function parse_args {
     set +u
     while [ "$1" != "" ]; do
         case "$1" in
+            -l | --selector )             SELECTOR="$2";                 shift;;
             -V | --version )              version;                       exit;;
             -h | --help )                 usage;                         exit;;
             --internal-helm )             shift; internal_helm "$@";     exit;;
@@ -314,6 +324,11 @@ function parse_args {
         esac
         shift
     done
+
+    # set defaults
+    if [[ -z "${SELECTOR}" ]]; then
+      SELECTOR="";
+    fi
 
     # restore positional arguments
     set -- "${args[@]}"
