@@ -1,13 +1,13 @@
 releases:
-  - name: test01
+  - name: crds-default
     chart: ./source/helm01
-  - name: test02
+  - name: crds-false
     chart: ./source/helm01
     values:
     - .kube-renderer:
         flags:
           crds: false
-  - name: test03
+  - name: crds-true
     chart: ./source/helm01
     values:
     - .kube-renderer:

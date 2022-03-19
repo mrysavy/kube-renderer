@@ -100,10 +100,6 @@ run_common_test() {
     run_common_test bootstrap
 }
 
-@test "render incorrectly helm with transformer also using hooks" {
-    run_common_test helm-transformer-hooks-no-fix
-}
-
 @test "can render correctly helm with transformer also using hooks" {
     run_common_test helm-transformer-hooks
 }
@@ -128,11 +124,11 @@ run_common_test() {
     run_common_test release-subdir
 }
 
-@test "can render with crds" {
+@test "can render with/without crds" {
     run_common_test crd-output-helm
 }
 
-@test "can render with hooks" {
+@test "can render with/without hooks" {
     run_common_test hook-output-helm
 }
 

@@ -1,13 +1,13 @@
 releases:
-  - name: test01
+  - name: hooks-default
     chart: ./source/helm01
-  - name: test02
+  - name: hooks-false
     chart: ./source/helm01
     values:
     - .kube-renderer:
         flags:
           hooks: false
-  - name: test03
+  - name: hooks-true
     chart: ./source/helm01
     values:
     - .kube-renderer:
