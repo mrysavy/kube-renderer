@@ -94,13 +94,26 @@ function internal_helm() {
 function render {
     cp -r "${SOURCE}" "${TMPDIR}/source"
 
-    local INPUT=()
+    local ARGS=()
     local HELMBINARY=
     if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
-        INPUT=("-f" "${TMPDIR}/source/helmfile.yaml")
+        ARGS+=("-f" "${TMPDIR}/source/helmfile.yaml")
         HELMBINARY="$(yq eval '.helmBinary // ""' "${TMPDIR}/source/helmfile.yaml")"
     elif [[ -d "${SOURCE}/helmfile.d" ]]; then
-        INPUT=("-f" "${TMPDIR}/source/helmfile.d")
+        ARGS+=("-f" "${TMPDIR}/source/helmfile.d")
+    fi
+
+    if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
+        ARGS+=("--state-values-file" "./values.yaml")
+
+        while IFS= read -r -d '' FILE; do
+            gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/source/values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
+            rm "${FILE}"
+        done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
+    fi
+
+    if [[ -n "${SELECTOR}" ]]; then
+        ARGS+=("--selector" "${SELECTOR}")
     fi
 
     cat > "${TMPDIR}/helm-internal" <<EOF
@@ -109,25 +122,10 @@ exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${TMPDIR}" "\$@"
 EOF
     chmod +x "${TMPDIR}/helm-internal"
 
-    local STATE_VALUES=()
-    if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
-        STATE_VALUES=("--state-values-file" "./values.yaml")
-
-        while IFS= read -r -d '' FILE; do
-            gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/source/values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
-            rm "${FILE}"
-        done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
-    fi
-
-    local PARTIAL=()
-    if [[ -n "${SELECTOR}" ]]; then
-        PARTIAL=("--selector" "${SELECTOR}")
-    fi
-
     mkdir -p "${TMPDIR}/helmfile-values"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
     rm -rf "${TMPDIR}/helmfile-temp-chartify"
 
     # shellcheck disable=SC2016
@@ -157,7 +155,7 @@ EOF
     fi
 
     # Output to single plain stdout lost information about helm release
-    helmfile "${INPUT[@]}" "${STATE_VALUES[@]}" "${PARTIAL[@]}" --helm-binary "${TMPDIR}/helm-internal" template --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     declare -A RELEASES
     declare -A DIRS
