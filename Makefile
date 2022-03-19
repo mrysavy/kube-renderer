@@ -2,13 +2,13 @@ SUITE:='.*'
 
 .PHONY: tests
 
-all: shellcheck clean build tests_all
-suite: clean build tests
-
-tests_all:
-	@test/bats/bin/bats test/test.bats
+all: shellcheck clean build tests
+suite: clean build tests_partial
 
 tests:
+	@test/bats/bin/bats test/test.bats
+
+tests_partial:
 	@test/bats/bin/bats test/test.bats -f $(SUITE)
 
 build:
@@ -17,7 +17,7 @@ build:
 	@chmod +x output/kube-renderer.sh
 
 shellcheck:
-	@hellcheck src/kube-renderer.sh
+	@shellcheck src/kube-renderer.sh
 
 clean:
 	@rm -rf output

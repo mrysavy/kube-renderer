@@ -29,6 +29,10 @@ jobs:
           curl -s -L -o /usr/local/bin/gomplate https://github.com/hairyhenderson/gomplate/releases/download/v3.10.0/gomplate_linux-amd64 &&
           chmod +x /usr/local/bin/gomplate
 
+      - name: Lint
+        run: |
+          make shellcheck
+
       - name: Build
         run: |
           make clean build
