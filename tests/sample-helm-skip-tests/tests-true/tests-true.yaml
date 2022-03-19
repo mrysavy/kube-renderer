@@ -1,0 +1,32 @@
+---
+# Source: TestChart/templates/cm1.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1a
+  namespace: testns
+---
+# Source: TestChart/templates/cm1.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1b
+  namespace: testns
+---
+# Source: TestChart/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a
+  namespace: testns
+  annotations:
+    helm.sh/hook: test
+---
+# Source: TestChart/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2b
+  namespace: testns
+  annotations:
+    helm.sh/hook: test

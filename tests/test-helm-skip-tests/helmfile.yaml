@@ -1,0 +1,16 @@
+releases:
+- name: tests-default
+  chart: ./source/TestChart
+- name: tests-false
+  chart: ./source/TestChart
+  values:
+    - .kube-renderer:
+        flags:
+          tests: false
+- name: tests-true
+  chart: ./source/TestChart
+  values:
+    - .kube-renderer:
+        flags:
+          tests: true
+          hooks: true     # tests without hooks don't work

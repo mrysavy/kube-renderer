@@ -50,6 +50,10 @@ function internal_helm() {
             if [[ ! "${CRDS}" == "false" ]]; then
                 ARGS+=("--include-crds")
             fi
+            local TESTS; TESTS=$(yq eval '.flags.tests // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            if [[ ! "${TESTS}" == "true" ]]; then
+                ARGS+=("--skip-tests")
+            fi
             FIX_HOOKS=$(yq eval '.flags.fixhooks // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
         fi
 
