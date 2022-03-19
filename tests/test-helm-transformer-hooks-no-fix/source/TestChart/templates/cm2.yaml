@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a
+  namespace: {{ .Values.namespace }}
+  annotations:
+    helm.sh/hook: post-delete
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2b
+  namespace: {{ .Values.namespace }}
+  annotations:
+    helm.sh/hook: post-delete

@@ -100,6 +100,10 @@ run_common_test() {
     run_common_test bootstrap
 }
 
+@test "render incorrectly helm with transformer also using hooks" {
+    run_common_test helm-transformer-hooks-no-fix
+}
+
 @test "can render correctly helm with transformer also using hooks" {
     run_common_test helm-transformer-hooks
 }

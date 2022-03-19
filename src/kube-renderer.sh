@@ -40,6 +40,7 @@ function internal_helm() {
         fi
 
         local ARGS=()
+        local FIX_HOOKS=""
         if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
             local HOOKS; HOOKS=$(yq eval '.flags.hooks // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             if [[ ! "${HOOKS}" == "true" ]]; then
@@ -49,6 +50,7 @@ function internal_helm() {
             if [[ ! "${CRDS}" == "false" ]]; then
                 ARGS+=("--include-crds")
             fi
+            FIX_HOOKS=$(yq eval '.flags.fixhooks // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
         fi
 
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
@@ -58,7 +60,7 @@ function internal_helm() {
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
             done
         else
-            if yq eval -e 'select(.metadata.annotations."helm.sh/hook" != "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null && yq eval -e 'select(.metadata.annotations."helm.sh/hook" == "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null; then
+            if [[ "${FIX_HOOKS}" == "true" ]] && yq eval -e 'select(.metadata.annotations."helm.sh/hook" != "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null && yq eval -e 'select(.metadata.annotations."helm.sh/hook" == "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null; then
                 sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_res.yaml|'   "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
                 sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_hooks.yaml|' "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_hooks.yaml"
 

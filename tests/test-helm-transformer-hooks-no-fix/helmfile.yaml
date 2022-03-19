@@ -11,9 +11,3 @@ releases:
     - .kube-renderer:
         flags:
           hooks: true
-environments:
-  default:
-    values:
-      - .kube-renderer:
-          flags:
-            fixhooks: true
