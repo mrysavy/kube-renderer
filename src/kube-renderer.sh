@@ -204,7 +204,6 @@ EOF
     done
 
     for APP in "${!RELEASES[@]}"; do
-        APP="${APP#${TMPDIR}/combined/}"
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 cat > "${TMPDIR}/combined/${APP}/kustomization.yaml" <<EOF
