@@ -136,6 +136,10 @@ run_common_test() {
     run_common_test hook-output-helm
 }
 
+@test "can remove labels" {
+    run_common_test remove-labels
+}
+
 teardown() {
     rm -rf tests-output
 }

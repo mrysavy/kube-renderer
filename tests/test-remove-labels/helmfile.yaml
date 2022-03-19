@@ -1,0 +1,19 @@
+releases:
+- name: remove-labels-all
+  chart: ./source/plain01
+  values:
+    - .kube-renderer:
+        remove_labels:
+          - label1
+          - label2a
+          - label2b
+          - label3
+- name: remove-labels-none
+  chart: ./source/plain01
+- name: remove-labels-some
+  chart: ./source/plain01
+  values:
+    - .kube-renderer:
+        remove_labels:
+          - label2a
+          - label2b

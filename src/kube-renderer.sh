@@ -185,7 +185,7 @@ EOF
             fi
             RELEASES["${APP}"]="${TARGET_RELEASE}"
 
-            mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/final/${APP}"
+            mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/labelsremoved/${APP}" "${TMPDIR}/final/${APP}"
             find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
             local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
@@ -200,24 +200,31 @@ EOF
                 yq eval "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml" > "${TMPDIR}/combined/${APP}/resources.yaml.tmp"
                 mv "${TMPDIR}/combined/${APP}/resources.yaml.tmp" "${TMPDIR}/combined/${APP}/resources.yaml"
             fi
+
+            local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            cp "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
+            for LABEL in ${REMOVE_LABELS}; do
+                yq 'del(.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml" > "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml"
+                mv "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
+            done
         done
     done
 
     for APP in "${!RELEASES[@]}"; do
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
-                cat > "${TMPDIR}/combined/${APP}/kustomization.yaml" <<EOF
+                cat > "${TMPDIR}/labelsremoved/${APP}/kustomization.yaml" <<EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
 - resources.yaml
 EOF
-                kustomize build "${TMPDIR}/combined/${APP}" -o "${TMPDIR}/final/${APP}/"
+                kustomize build "${TMPDIR}/labelsremoved/${APP}" -o "${TMPDIR}/final/${APP}/"
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/splitted/${APP}"
                 # shellcheck disable=SC2016
-                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${APP}/resources.yaml"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort); do
                     local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
                     mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
@@ -227,7 +234,7 @@ EOF
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
                 # shellcheck disable=SC2016
-                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/combined/${APP}/resources.yaml"
+                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
                 for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
                     FILE="${TMPDIR}/splitted/${APP}/${FILE}"
                     local RECONSTRUCTED; RECONSTRUCTED="$(grep -m1 '# Source' "${FILE}" | sed 's/# Source: //')"
@@ -244,7 +251,7 @@ EOF
                 cp -r "${TMPDIR}/reconstructed/${APP}/"* "${TMPDIR}/final/${APP}/"
             fi
         else
-            cp -r "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
+            cp -r "${TMPDIR}/labelsremoved/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
         fi
     done
 

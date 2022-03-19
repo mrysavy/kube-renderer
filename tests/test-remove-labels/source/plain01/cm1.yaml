@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1a
+  labels:
+    label1: value1
+    label2a: value2a
+    label2b: value2b
+    label3: value3
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1b
+  labels:
+    label1: value1
+    label2a: value2a
+    label2b: value2b
+    label3: value3

@@ -1,0 +1,28 @@
+---
+# Source: plain01/templates/cm1.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1a
+  labels: {}
+---
+# Source: plain01/templates/cm1.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1b
+  labels: {}
+---
+# Source: plain01/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a
+  labels: {}
+---
+# Source: plain01/templates/cm2.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2b
+  labels: {}
