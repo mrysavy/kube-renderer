@@ -204,7 +204,7 @@ EOF
             local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
             cp "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
             for LABEL in ${REMOVE_LABELS}; do
-                yq 'del(.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml" > "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml"
+                yq 'del(.metadata.labels."'"${LABEL}"'") | del(.spec.template.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml" > "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml"
                 mv "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
             done
         done
