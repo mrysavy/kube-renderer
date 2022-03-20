@@ -120,6 +120,11 @@ function render {
         ARGS+=("--selector" "${SELECTOR}")
     fi
 
+    local SKIP_DEPS; SKIP_DEPS=()
+    if [[ -n "${LOCAL_HELM_CACHE}" ]]; then
+        SKIP_DEPS=("--skip-deps")
+    fi
+
     cat > "${TMPDIR}/helm-internal" <<EOF
 #!/usr/bin/env bash
 exec "$(readlink -f "$0")" --internal-helm "${HELMBINARY}" "${TMPDIR}" "\$@"
@@ -127,7 +132,7 @@ EOF
     chmod +x "${TMPDIR}/helm-internal"
 
     mkdir -p "${TMPDIR}/helmfile-values"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml" "${SKIP_DEPS[@]}"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build > "${TMPDIR}/helmfile-values/globals.yaml"
     rm -rf "${TMPDIR}/helmfile-temp-chartify"
@@ -326,6 +331,7 @@ function usage {
     echo "usage: kube-renderer.sh SOURCE TARGET [-Vh] [-l <selector>]"
     echo "   ";
     echo "  -l | --selector          : Partial render based on helmfile selector";
+    echo "  -c | --local-helm-cache  : Use local helm cache";
     echo "  -V | --version           : Print version info";
     echo "  -h | --help              : This message";
 }
@@ -343,6 +349,7 @@ function parse_args {
     while [ "$1" != "" ]; do
         case "$1" in
             -l | --selector )             SELECTOR="$2";                 shift;;
+            -c | --local-helm-cache )     LOCAL_HELM_CACHE="true";       ;;
             -V | --version )              version;                       exit;;
             -h | --help )                 usage;                         exit;;
             --internal-helm )             shift; internal_helm "$@";     exit;;
@@ -354,6 +361,9 @@ function parse_args {
     # set defaults
     if [[ -z "${SELECTOR}" ]]; then
       SELECTOR="";
+    fi
+    if [[ -z "${LOCAL_HELM_CACHE}" ]]; then
+      LOCAL_HELM_CACHE="";
     fi
 
     # restore positional arguments
@@ -387,5 +397,9 @@ trap 'rm -rf -- "$TMPDIR"' EXIT
 mkdir "${TMPDIR}/helmfile-temp" "${TMPDIR}/helmfile-temp-chartify"
 export HELMFILE_TEMPDIR="${TMPDIR}/helmfile-temp"
 export CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify"
+if [[ -z "${LOCAL_HELM_CACHE}" ]]; then
+    export HELM_CACHE_HOME="${TMPDIR}/helmcache"
+    export HELM_CONFIG_HOME="${TMPDIR}/helmconfig"
+fi
 
 render
