@@ -109,7 +109,10 @@ function render {
     fi
 
     if [[ "${DEBUG_MODE}" == "true" ]]; then
+      ARGS+=("--debug")
       ARGS_TMPL+=("--skip-cleanup")
+    else
+      ARGS+=("--quiet")
     fi
 
     if [[ -n "${SELECTOR}" ]]; then
@@ -403,7 +406,7 @@ function parse_args {
 parse_args "$@"
 
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
-if [[ "${DEBUG_MODE}" == "true" ]]; then
+if [[ "${DEBUG_MODE}" != "true" ]]; then
     trap 'rm -rf -- "$TMPDIR"' EXIT
 fi
 mkdir "${TMPDIR}/helmfile-temp" "${TMPDIR}/helmfile-temp-chartify"
