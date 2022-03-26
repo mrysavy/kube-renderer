@@ -148,36 +148,6 @@ EOF
         done
     done
 
-    local RENDER_FILENAME_GENERATOR=
-    # shellcheck disable=SC2016
-    local RENDER_FILENAME_PATTERN='
-        .".kube-renderer".crds  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".crds  |= (sub("^(?:(CustomResourceDefinition~apiextensions.k8s.io)|.*)$", "$1")                | sub(".+", "/crds")) |
-        .".kube-renderer".tests = (.metadata.annotations."helm.sh/hook" // "")                                                                   | .".kube-renderer".tests |= (sub("^(?:(test)|.*)$", "$1")                                                         | sub(".+", "/tests")) |
-        .".kube-renderer".hooks = ((.metadata.annotations."helm.sh/hook" // "") + (.metadata.annotations."argocd.argoproj.io/hook" // ""))       | .".kube-renderer".hooks |= (sub("test", "")                                                                      | sub(".+", "/hooks")) |
-        .".kube-renderer".rbac  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".rbac  |= (sub("^(?:((?:ClusterRoleBinding|ClusterRole)~rbac.authorization.k8s.io)|.*)$", "$1") | sub(".+", "/rbac")) |
-        (.metadata.namespace // "_cluster") +
-        .".kube-renderer".crds +
-        .".kube-renderer".tests +
-        .".kube-renderer".hooks +
-        .".kube-renderer".rbac +
-        "/" +
-        (.kind // "_unknown") +
-        (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) +
-        "_" +
-        (.metadata.name // "_unknown") +
-        ".yaml"
-    '
-    local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
-    local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
-
-    if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
-        RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
-    fi
-
-    if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
-        RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
-    fi
-
     while IFS= read -r -d '' FILE; do
         gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
         rm "${FILE}"
@@ -236,6 +206,36 @@ EOF
     done
 
     for APP in "${!RELEASES[@]}"; do
+        local RENDER_FILENAME_GENERATOR=
+        # shellcheck disable=SC2016
+        local RENDER_FILENAME_PATTERN='
+            .".kube-renderer".crds  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".crds  |= (sub("^(?:(CustomResourceDefinition~apiextensions.k8s.io)|.*)$", "$1")                | sub(".+", "/crds")) |
+            .".kube-renderer".tests = (.metadata.annotations."helm.sh/hook" // "")                                                                   | .".kube-renderer".tests |= (sub("^(?:(test)|.*)$", "$1")                                                         | sub(".+", "/tests")) |
+            .".kube-renderer".hooks = ((.metadata.annotations."helm.sh/hook" // "") + (.metadata.annotations."argocd.argoproj.io/hook" // ""))       | .".kube-renderer".hooks |= (sub("test", "")                                                                      | sub(".+", "/hooks")) |
+            .".kube-renderer".rbac  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".rbac  |= (sub("^(?:((?:ClusterRoleBinding|ClusterRole)~rbac.authorization.k8s.io)|.*)$", "$1") | sub(".+", "/rbac")) |
+            (.metadata.namespace // "_cluster") +
+            .".kube-renderer".crds +
+            .".kube-renderer".tests +
+            .".kube-renderer".hooks +
+            .".kube-renderer".rbac +
+            "/" +
+            (.kind // "_unknown") +
+            (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) +
+            "_" +
+            (.metadata.name // "_unknown") +
+            ".yaml"
+        '
+        local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
+        local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
+
+        if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
+            RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
+        fi
+
+        if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
+            RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
+        fi
+
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
             if [[ "kustomize" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 cat > "${TMPDIR}/labelsremoved/${APP}/kustomization.yaml" <<EOF
