@@ -398,8 +398,9 @@ mkdir "${TMPDIR}/helmfile-temp" "${TMPDIR}/helmfile-temp-chartify"
 export HELMFILE_TEMPDIR="${TMPDIR}/helmfile-temp"
 export CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify"
 if [[ -z "${LOCAL_HELM_CACHE}" ]]; then
-    export HELM_CACHE_HOME="${TMPDIR}/helmcache"
-    export HELM_CONFIG_HOME="${TMPDIR}/helmconfig"
+    export HELM_CACHE_HOME="${TMPDIR}/helmhome"
+    export HELM_CONFIG_HOME="${TMPDIR}/helmhome"
+    export HELM_DATA_HOME="${TMPDIR}/helmhome"
 fi
 
 render
