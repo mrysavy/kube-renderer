@@ -9,7 +9,7 @@ tests:
 	@test/bats/bin/bats -T test/test.bats
 
 tests_partial:
-	@test/bats/bin/bats test/test.bats -f $(SUITE)
+	@test/bats/bin/bats -T test/test.bats -f $(SUITE)
 
 build:
 	@mkdir -p output
