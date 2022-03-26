@@ -3,3 +3,8 @@ releases:
   chart: ./source/helm01
   values:
     - namespace: {{ .Values.ns }}
+
+environments:
+  default:
+    values:
+      - ns: testns

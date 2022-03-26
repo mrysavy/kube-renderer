@@ -41,20 +41,20 @@ function internal_helm() {
 
         local ARGS=()
         local FIX_HOOKS=""
-        if [[ -f "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" ]]; then
-            local HOOKS; HOOKS=$(yq eval '.flags.hooks // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+        if [[ -f "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml" ]]; then
+            local HOOKS; HOOKS=$(yq eval '.flags.hooks // false' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ ! "${HOOKS}" == "true" ]]; then
                 ARGS+=("--no-hooks")
             fi
-            local CRDS; CRDS=$(yq eval '.flags.crds == false | not' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            local CRDS; CRDS=$(yq eval '.flags.crds == false | not' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ ! "${CRDS}" == "false" ]]; then
                 ARGS+=("--include-crds")
             fi
-            local TESTS; TESTS=$(yq eval '.flags.tests // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            local TESTS; TESTS=$(yq eval '.flags.tests // false' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ ! "${TESTS}" == "true" ]]; then
                 ARGS+=("--skip-tests")
             fi
-            FIX_HOOKS=$(yq eval '.flags.fixhooks // false' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            FIX_HOOKS=$(yq eval '.flags.fixhooks // false' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
         fi
 
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
@@ -112,15 +112,6 @@ function render {
       ARGS_TMPL+=("--skip-cleanup")
     fi
 
-    if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
-        ARGS+=("--state-values-file" "./values.yaml")
-
-        while IFS= read -r -d '' FILE; do
-            gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/source/values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
-            rm "${FILE}"
-        done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
-    fi
-
     if [[ -n "${SELECTOR}" ]]; then
         ARGS+=("--selector" "${SELECTOR}")
     fi
@@ -137,10 +128,14 @@ EOF
     chmod +x "${TMPDIR}/helm-internal"
 
     mkdir -p "${TMPDIR}/helmfile-values"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/{{ .Release.Name }}.yaml" "${SKIP_DEPS[@]}"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build | yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/"'" + .name + "-metadata.yaml"'
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/global"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build > "${TMPDIR}/helmfile-values/globals.yaml"
-    rm -rf "${TMPDIR}/helmfile-temp-chartify"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/app-{{ .Release.Name }}.yaml" "${SKIP_DEPS[@]}"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/list"    helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" list --keep-temp-dir --output json | yq -PM > "${TMPDIR}/helmfile-values/list.yaml"
+    yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/app-"'" + .name + "-metadata.yaml"' "${TMPDIR}/helmfile-values/globals.yaml"
+    yq eval '.[].name' "${TMPDIR}/helmfile-values/list.yaml" > "${TMPDIR}/helmfile-values/names.yaml"
+
+    yq eval 'select(document_index == 0) | .renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
+    yq eval 'select(document_index == 0) | .renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
 
     # shellcheck disable=SC2016
     yq eval-all -N -s '"'"${TMPDIR}/helmfile-values/global-"'" + $index' "${TMPDIR}/helmfile-values/globals.yaml"
@@ -148,9 +143,9 @@ EOF
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
             # shellcheck disable=SC2016
-            yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | del(.".*")'        "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/${APP}-values.yaml"
+            yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | del(.".*")'        "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/app-${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/app-${APP}-values.yaml"
             # shellcheck disable=SC2016
-            yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | .".kube-renderer"' "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml"
+            yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | .".kube-renderer"' "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/app-${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml"
         done
     done
 
@@ -173,8 +168,8 @@ EOF
         (.metadata.name // "_unknown") +
         ".yaml"
     '
-    local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")"
-    local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")"
+    local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
+    local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
 
     if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
         RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
@@ -183,6 +178,11 @@ EOF
     if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
         RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
     fi
+
+    while IFS= read -r -d '' FILE; do
+        gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
+        rm "${FILE}"
+    done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
 
     # Output to single plain stdout lost information about helm release
     helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
@@ -199,11 +199,11 @@ EOF
             if [[ -n "${SELECTOR}" && ! -d "${TMPDIR}/helmfile/${APP}" ]]; then
                 continue
             fi
-            local TARGET_RELEASE; TARGET_RELEASE=$(yq eval '.target_release // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            local TARGET_RELEASE; TARGET_RELEASE=$(yq eval '.target_release // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ -z "${TARGET_RELEASE}" ]]; then
                 TARGET_RELEASE="${APP}"
 
-                local TARGET_DIR; TARGET_DIR=$(yq eval '.target_dir // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+                local TARGET_DIR; TARGET_DIR=$(yq eval '.target_dir // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
                 if [[ -z "${TARGET_DIR}" ]]; then
                     TARGET_DIR="${TARGET_RELEASE}"
                 fi
@@ -214,7 +214,7 @@ EOF
             mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/labelsremoved/${APP}" "${TMPDIR}/final/${APP}"
             find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
-            local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             case "${POSTRENDERER_TYPE}" in
                 "kustomize" ) postrender_kustomize "${APP}";;
                 * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
@@ -227,7 +227,7 @@ EOF
                 mv "${TMPDIR}/combined/${APP}/resources.yaml.tmp" "${TMPDIR}/combined/${APP}/resources.yaml"
             fi
 
-            local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml")
+            local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             cp "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
             for LABEL in ${REMOVE_LABELS}; do
                 yq 'del(.metadata.labels."'"${LABEL}"'") | del(.spec.template.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml" > "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml"
@@ -297,7 +297,7 @@ EOF
 function postrender_kustomize {
     local APP=$1; shift
 
-    yq eval '.helm_postrenderer.data' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/merged/${APP}/resources.yaml"'"' - > "${TMPDIR}/merged/${APP}/kustomization.yaml"
+    yq eval '.helm_postrenderer.data' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/merged/${APP}/resources.yaml"'"' - > "${TMPDIR}/merged/${APP}/kustomization.yaml"
     kustomize build "${TMPDIR}/merged/${APP}" > "${TMPDIR}/postrendered/${APP}/resources.yaml"
 }
 
@@ -315,9 +315,9 @@ function bootstrap() {
                 # shellcheck disable=SC2016
                 gomplate \
                     -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
-                        <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/${APP}-metadata.yaml.yml") \
-                        <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/${APP}-values.yaml") \
-                        <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/${APP}-kuberenderer.yaml") \
+                        <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/app-${APP}-metadata.yaml.yml") \
+                        <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/app-${APP}-values.yaml") \
+                        <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml") \
                         )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${TARGET_DIR}.yaml"
             fi
         done
