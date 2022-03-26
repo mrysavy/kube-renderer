@@ -133,8 +133,8 @@ EOF
     yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/app-"'" + .name + "-metadata.yaml"' "${TMPDIR}/helmfile-values/globals.yaml"
     yq eval '.[].name' "${TMPDIR}/helmfile-values/list.yaml" > "${TMPDIR}/helmfile-values/names.yaml"
 
-    yq eval 'select(document_index == 0) | .renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
-    yq eval 'select(document_index == 0) | .renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
+    yq eval '.renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
+    yq eval '.renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
 
     # shellcheck disable=SC2016
     yq eval-all -N -s '"'"${TMPDIR}/helmfile-values/global-"'" + $index' "${TMPDIR}/helmfile-values/globals.yaml"
@@ -192,15 +192,13 @@ EOF
             if [[ ! -f "${TMPDIR}/combined/${APP}/resources.yaml" ]]; then
                 cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${APP}/resources.yaml"
             else
-                yq eval "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml" > "${TMPDIR}/combined/${APP}/resources.yaml.tmp"
-                mv "${TMPDIR}/combined/${APP}/resources.yaml.tmp" "${TMPDIR}/combined/${APP}/resources.yaml"
+                yq eval-all --inplace "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
             fi
 
             local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             cp "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
             for LABEL in ${REMOVE_LABELS}; do
-                yq 'del(.metadata.labels."'"${LABEL}"'") | del(.spec.template.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml" > "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml"
-                mv "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
+                yq eval --inplace 'del(.metadata.labels."'"${LABEL}"'") | del(.spec.template.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
             done; unset LABEL
         done; unset APP
     done; unset GLOBAL
