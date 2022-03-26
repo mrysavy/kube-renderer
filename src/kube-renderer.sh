@@ -150,21 +150,6 @@ EOF
         done; unset APP
     done; unset GLOBAL
 
-    while IFS= read -r -d '' FILE; do
-        # shellcheck disable=SC2016
-        gomplate \
-            -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
-                <(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml") \
-                <(yq eval '{ "Releases": . }'    "${TMPDIR}/helmfile-values/releases.yaml") \
-                <(yq eval '{ "Metadata": . }'    "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml") \
-                )?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
-
-        rm "${FILE}"
-    done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
-
-    # Output to single plain stdout lost information about helm release
-    helmfile -f "${TMPDIR}/source/helmfile.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
-
     declare -A RELEASES
     declare -A DIRS
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
@@ -174,9 +159,6 @@ EOF
         fi
 
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
-            if [[ -n "${SELECTOR}" && ! -d "${TMPDIR}/helmfile/${APP}" ]]; then
-                continue
-            fi
             local TARGET_RELEASE; TARGET_RELEASE=$(yq eval '.target_release // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ -z "${TARGET_RELEASE}" ]]; then
                 TARGET_RELEASE="${APP}"
@@ -186,33 +168,56 @@ EOF
                     TARGET_DIR="${TARGET_RELEASE}"
                 fi
                 DIRS["${APP}"]="${HELMFILE_DIR}/${TARGET_DIR}"
+                echo "${APP}: ${HELMFILE_DIR}/${TARGET_DIR}" >> "${TMPDIR}/helmfile-values/mapping-dirs.yaml"
             fi
             RELEASES["${APP}"]="${TARGET_RELEASE}"
-
-            mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/labelsremoved/${APP}" "${TMPDIR}/final/${APP}"
-            find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
-
-            local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
-            case "${POSTRENDERER_TYPE}" in
-                "kustomize" ) postrender_kustomize "${APP}";;
-                * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
-            esac
-
-            if [[ ! -f "${TMPDIR}/combined/${APP}/resources.yaml" ]]; then
-                cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${APP}/resources.yaml"
-            else
-                yq eval-all --inplace "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
-            fi
-
-            local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
-            cp "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
-            for LABEL in ${REMOVE_LABELS}; do
-                yq eval --inplace 'del(.metadata.labels."'"${LABEL}"'") | del(.spec.template.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
-            done; unset LABEL
+            echo "${APP}: ${TARGET_RELEASE}" >> "${TMPDIR}/helmfile-values/mapping-releases.yaml"
         done; unset APP
     done; unset GLOBAL
 
+    while IFS= read -r -d '' FILE; do
+        # shellcheck disable=SC2016
+        gomplate \
+            -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
+                <(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml") \
+                <(yq eval '{ "Releases": . }'    "${TMPDIR}/helmfile-values/releases.yaml") \
+                <(yq eval '{ "Metadata": . }'    "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml") \
+                <(yq eval '{ "ReleasesMap": . }' "${TMPDIR}/helmfile-values/mapping-releases.yaml") \
+                <(yq eval '{ "DirsMap": . }'     "${TMPDIR}/helmfile-values/mapping-dirs.yaml") \
+                )?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
+
+        rm "${FILE}"
+    done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
+
+    # Output to single plain stdout lost information about helm release
+    helmfile -f "${TMPDIR}/source/helmfile.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+
     for APP in "${!RELEASES[@]}"; do
+        if [[ -n "${SELECTOR}" && ! -d "${TMPDIR}/helmfile/${APP}" ]]; then
+            continue
+        fi
+
+        mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/labelsremoved/${APP}" "${TMPDIR}/final/${APP}"
+        find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
+
+        local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
+        case "${POSTRENDERER_TYPE}" in
+            "kustomize" ) postrender_kustomize "${APP}";;
+            * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
+        esac
+
+        if [[ ! -f "${TMPDIR}/combined/${APP}/resources.yaml" ]]; then
+            cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${APP}/resources.yaml"
+        else
+            yq eval-all --inplace "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
+        fi
+
+        local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
+        cp "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
+        for LABEL in ${REMOVE_LABELS}; do
+            yq eval --inplace 'del(.metadata.labels."'"${LABEL}"'") | del(.spec.template.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
+        done; unset LABEL
+
         local RENDER_FILENAME_GENERATOR=
         # shellcheck disable=SC2016
         local RENDER_FILENAME_PATTERN='
