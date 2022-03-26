@@ -62,7 +62,7 @@ function internal_helm() {
 
             for FILE in $(find "${HELMOUTPUTDIR}/" -type f | sort | sed "s|^${HELMOUTPUTDIR}/||"); do
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
-            done
+            done; unset FILE
         else
             if [[ "${FIX_HOOKS}" == "true" ]] && yq eval -e 'select(.metadata.annotations."helm.sh/hook" != "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null && yq eval -e 'select(.metadata.annotations."helm.sh/hook" == "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null; then
                 sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_res.yaml|'   "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
@@ -145,8 +145,8 @@ EOF
             yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | del(.".*")'        "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/app-${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/app-${APP}-values.yaml"
             # shellcheck disable=SC2016
             yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | .".kube-renderer"' "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/app-${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml"
-        done
-    done
+        done; unset APP
+    done; unset GLOBAL
 
     while IFS= read -r -d '' FILE; do
         gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
@@ -201,9 +201,9 @@ EOF
             for LABEL in ${REMOVE_LABELS}; do
                 yq 'del(.metadata.labels."'"${LABEL}"'") | del(.spec.template.metadata.labels."'"${LABEL}"'")' "${TMPDIR}/labelsremoved/${APP}/resources.yaml" > "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml"
                 mv "${TMPDIR}/labelsremoved/${APP}/resources_temp.yaml" "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
-            done
-        done
-    done
+            done; unset LABEL
+        done; unset APP
+    done; unset GLOBAL
 
     for APP in "${!RELEASES[@]}"; do
         local RENDER_FILENAME_GENERATOR=
@@ -255,7 +255,7 @@ EOF
                     mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
                     touch "${TMPDIR}/final/${APP}/${NEWFILE}"
                     yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
-                done
+                done; unset FILE
             elif [[ "helm" == "${RENDER_FILENAME_GENERATOR}" ]]; then
                 mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
                 # shellcheck disable=SC2016
@@ -271,21 +271,21 @@ EOF
                         local NEWFILE="${FILE#${TMPDIR}/splitted/${APP}/}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
                         cp "${FILE}" "${NEWFILE}"
                     fi
-                done
+                done; unset FILE
 
                 cp -r "${TMPDIR}/reconstructed/${APP}/"* "${TMPDIR}/final/${APP}/"
             fi
         else
             cp -r "${TMPDIR}/labelsremoved/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
         fi
-    done
+    done; unset APP
 
     for APP in "${!RELEASES[@]}"; do
         local TARGET_RELEASE=${RELEASES["${APP}"]}
         local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
         mkdir -p "${TARGET}/${TARGET_DIR}"
         cp -r "${TMPDIR}/final/${APP}/"* "${TARGET}/${TARGET_DIR}/"
-    done
+    done; unset APP
 
     if [[ -z "${SELECTOR}" && -f "${SOURCE}/bootstrap.yaml" ]]; then
         bootstrap
@@ -319,8 +319,8 @@ function bootstrap() {
                         <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml") \
                         )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${TARGET_DIR}.yaml"
             fi
-        done
-    done
+        done; unset APP
+    done; unset GLOBAL
 
     # shellcheck disable=SC2016
     gomplate \
