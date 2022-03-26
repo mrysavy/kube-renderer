@@ -400,6 +400,9 @@ function parse_args {
 }
 
 parse_args "$@"
+if [[ "${DEBUG_MODE}" == "true" ]]; then
+    set -x
+fi
 
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
 if [[ "${DEBUG_MODE}" != "true" ]]; then
