@@ -99,12 +99,17 @@ function render {
     cp -r "${SOURCE}" "${TMPDIR}/source"
 
     local ARGS=()
+    local ARGS_TMPL=()
     local HELMBINARY=
     if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
         ARGS+=("-f" "${TMPDIR}/source/helmfile.yaml")
         HELMBINARY="$(yq eval '.helmBinary // ""' "${TMPDIR}/source/helmfile.yaml")"
     elif [[ -d "${SOURCE}/helmfile.d" ]]; then
         ARGS+=("-f" "${TMPDIR}/source/helmfile.d")
+    fi
+
+    if [[ "${DEBUG_MODE}" == "true" ]]; then
+      ARGS_TMPL+=("--skip-cleanup")
     fi
 
     if [[ -f "${TMPDIR}/source/values.yaml" ]]; then
@@ -180,7 +185,7 @@ EOF
     fi
 
     # Output to single plain stdout lost information about helm release
-    helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     declare -A RELEASES
     declare -A DIRS
@@ -328,8 +333,9 @@ function bootstrap() {
 }
 
 function usage {
-    echo "usage: kube-renderer.sh SOURCE TARGET [-Vh] [-l <selector>]"
+    echo "usage: kube-renderer.sh SOURCE TARGET [-Vh] [-l <selector>] [-d]"
     echo "   ";
+    echo "  -d | --debug             : Dobug mode";
     echo "  -l | --selector          : Partial render based on helmfile selector";
     echo "  -c | --local-helm-cache  : Use local helm cache";
     echo "  -V | --version           : Print version info";
@@ -348,6 +354,7 @@ function parse_args {
     set +u
     while [ "$1" != "" ]; do
         case "$1" in
+            -d | --debug )                DEBUG_MODE="true";             ;;
             -l | --selector )             SELECTOR="$2";                 shift;;
             -c | --local-helm-cache )     LOCAL_HELM_CACHE="true";       ;;
             -V | --version )              version;                       exit;;
@@ -359,6 +366,9 @@ function parse_args {
     done
 
     # set defaults
+    if [[ -z "${DEBUG_MODE}" ]]; then
+      DEBUG_MODE="";
+    fi
     if [[ -z "${SELECTOR}" ]]; then
       SELECTOR="";
     fi
@@ -393,7 +403,9 @@ function parse_args {
 parse_args "$@"
 
 TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
-trap 'rm -rf -- "$TMPDIR"' EXIT
+if [[ "${DEBUG_MODE}" == "true" ]]; then
+    trap 'rm -rf -- "$TMPDIR"' EXIT
+fi
 mkdir "${TMPDIR}/helmfile-temp" "${TMPDIR}/helmfile-temp-chartify"
 export HELMFILE_TEMPDIR="${TMPDIR}/helmfile-temp"
 export CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify"
