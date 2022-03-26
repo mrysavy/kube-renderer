@@ -303,10 +303,11 @@ EOF
         fi
     done; unset APP
 
-    yq eval '.bootstrap_template // ""' "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml" > "${TMPDIR}/helmfile-values/bootstrap-template"
+    mkdir -p "${TMPDIR}/bootstrap/" "${TMPDIR}/bootstrap-template/"
+    yq eval '.bootstrap_template // ""' "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml" > "${TMPDIR}/bootstrap-template/bootstrap-template"
 
     local BOOTSTRAPS=()
-    if [[ -s "${TMPDIR}/helmfile-values/bootstrap-template" ]]; then
+    if [[ -s "${TMPDIR}/bootstrap-template/bootstrap-template" ]]; then
         # shellcheck disable=SC2016
         gomplate "${ARGS_GMPL[@]}" \
             -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
@@ -315,14 +316,13 @@ EOF
                 <(yq eval '{ "Metadata": . }'    "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml") \
                 <(yq eval '{ "ReleasesMap": . }' "${TMPDIR}/helmfile-values/mapping-releases.yaml") \
                 <(yq eval '{ "DirsMap": . }'     "${TMPDIR}/helmfile-values/mapping-dirs.yaml") \
-                )?type=application/yaml -f "${TMPDIR}/helmfile-values/bootstrap-template" -o "${TMPDIR}/helmfile-values/bootstrap-template.yaml"
+                )?type=application/yaml -f "${TMPDIR}/bootstrap-template/bootstrap-template" -o "${TMPDIR}/bootstrap-template/bootstrap-template.yaml"
 
         # shellcheck disable=SC2016
         local PATTERN; PATTERN='head_comment | capture("(?sm)^.*^Bootstrap: (?P<bootstrap>.*?$).*$") | .bootstrap'
 
-        mkdir -p "${TMPDIR}/bootstrap/"
         # shellcheck disable=SC2016
-        yq eval -N -s '("'"${TMPDIR}/bootstrap/"'"'' + $index) + ".yaml"' "${TMPDIR}/helmfile-values/bootstrap-template.yaml"
+        yq eval -N -s '("'"${TMPDIR}/bootstrap/"'"'' + $index) + ".yaml"' "${TMPDIR}/bootstrap-template/bootstrap-template.yaml"
         for FILE in $(find "${TMPDIR}/bootstrap/" -type f -printf "%f\n" | sort -V); do
             local NEWFILE; NEWFILE=$(yq eval -N "${PATTERN}" "${TMPDIR}/bootstrap/${FILE}")
             if [[ -n "${NEWFILE}" ]]; then
