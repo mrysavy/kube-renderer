@@ -106,6 +106,27 @@ function render {
     local ARGS_TMPL=()
     local HELMBINARY; HELMBINARY="$(yq eval '.helmBinary // ""' "${TMPDIR}/source/helmfile.yaml")"
 
+    # shellcheck disable=SC2016
+    local RENDER_FILENAME_PATTERN_BASE='
+        .".kube-renderer".crds  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".crds  |= (sub("^(?:(CustomResourceDefinition~apiextensions.k8s.io)|.*)$", "$1")                | sub(".+", "/crds"))  |
+        .".kube-renderer".tests = (.metadata.annotations."helm.sh/hook" // "")                                                                   | .".kube-renderer".tests |= (sub("^(?:(test)|.*)$", "$1")                                                         | sub(".+", "/tests")) |
+        .".kube-renderer".hooks = ((.metadata.annotations."helm.sh/hook" // "") + (.metadata.annotations."argocd.argoproj.io/hook" // ""))       | .".kube-renderer".hooks |= (sub("test", "")                                                                      | sub(".+", "/hooks")) |
+        .".kube-renderer".rbac  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".rbac  |= (sub("^(?:((?:ClusterRoleBinding|ClusterRole)~rbac.authorization.k8s.io)|.*)$", "$1") | sub(".+", "/rbac"))  |
+        (.metadata.namespace // "_cluster") +
+        .".kube-renderer".crds +
+        .".kube-renderer".tests +
+        .".kube-renderer".hooks +
+        .".kube-renderer".rbac +
+        "/" +
+        (.kind // "_unknown") +
+        (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) +
+        "_" +
+        (.metadata.name // "_unknown") +
+        ".yaml"
+    '
+    # shellcheck disable=SC2016
+    local RENDER_FILENAME_PATTERN_COMMENT='head_comment | capture("(?sm)^.*^Kuberenderer: (?P<kuberenderer>.*?$).*$") | .kuberenderer'
+
     if [[ "${DEBUG_MODE}" == "true" ]]; then
       ARGS+=("--debug")
       ARGS_TMPL+=("--skip-cleanup")
@@ -223,33 +244,9 @@ EOF
         done; unset LABEL
 
         local RENDER_FILENAME_GENERATOR=
-        # shellcheck disable=SC2016
-        local RENDER_FILENAME_PATTERN='
-            .".kube-renderer".crds  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".crds  |= (sub("^(?:(CustomResourceDefinition~apiextensions.k8s.io)|.*)$", "$1")                | sub(".+", "/crds")) |
-            .".kube-renderer".tests = (.metadata.annotations."helm.sh/hook" // "")                                                                   | .".kube-renderer".tests |= (sub("^(?:(test)|.*)$", "$1")                                                         | sub(".+", "/tests")) |
-            .".kube-renderer".hooks = ((.metadata.annotations."helm.sh/hook" // "") + (.metadata.annotations."argocd.argoproj.io/hook" // ""))       | .".kube-renderer".hooks |= (sub("test", "")                                                                      | sub(".+", "/hooks")) |
-            .".kube-renderer".rbac  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".rbac  |= (sub("^(?:((?:ClusterRoleBinding|ClusterRole)~rbac.authorization.k8s.io)|.*)$", "$1") | sub(".+", "/rbac")) |
-            (.metadata.namespace // "_cluster") +
-            .".kube-renderer".crds +
-            .".kube-renderer".tests +
-            .".kube-renderer".hooks +
-            .".kube-renderer".rbac +
-            "/" +
-            (.kind // "_unknown") +
-            (("." + ((.apiVersion // "v1") | sub("^(?:(.*)/)?(?:v.*)$", "${1}"))) | sub("^\.$", "")) +
-            "_" +
-            (.metadata.name // "_unknown") +
-            ".yaml"
-        '
         local RENDER_FILENAME_GENERATOR_CFG; RENDER_FILENAME_GENERATOR_CFG="$(yq eval '.render_filename_generator // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
-        local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
-
         if [[ -n "${RENDER_FILENAME_GENERATOR_CFG}" ]]; then
             RENDER_FILENAME_GENERATOR="${RENDER_FILENAME_GENERATOR_CFG}"
-        fi
-
-        if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
-            RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
         fi
 
         if [[ -n "${RENDER_FILENAME_GENERATOR}" ]]; then
@@ -263,10 +260,34 @@ resources:
 EOF
                 kustomize build "${TMPDIR}/labelsremoved/${APP}" -o "${TMPDIR}/final/${APP}/"
             elif [[ "yq" == "${RENDER_FILENAME_GENERATOR}" ]]; then
+                local RENDER_FILENAME_PATTERN=
+                RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_BASE}"
+                local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
+                if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
+                    RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
+                fi
+
                 mkdir -p "${TMPDIR}/splitted/${APP}"
                 # shellcheck disable=SC2016
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort); do
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort -V); do
+                    local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
+                    mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
+                    touch "${TMPDIR}/final/${APP}/${NEWFILE}"
+                    yq eval -i '.' "${TMPDIR}/final/${APP}/${NEWFILE}" "${TMPDIR}/splitted/${APP}/${FILE}"
+                done; unset FILE
+            elif [[ "comment" == "${RENDER_FILENAME_GENERATOR}" ]]; then
+                local RENDER_FILENAME_PATTERN=
+                RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_COMMENT}"
+                local RENDER_FILENAME_PATTERN_CFG; RENDER_FILENAME_PATTERN_CFG="$(yq eval '.render_filename_pattern // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")"
+                if [[ -n "${RENDER_FILENAME_PATTERN_CFG}" ]]; then
+                    RENDER_FILENAME_PATTERN="${RENDER_FILENAME_PATTERN_CFG}"
+                fi
+
+                mkdir -p "${TMPDIR}/splitted/${APP}"
+                # shellcheck disable=SC2016
+                yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -type f -printf "%f\n" | sort -V); do
                     local NEWFILE; NEWFILE=$(yq eval -N "${RENDER_FILENAME_PATTERN}" "${TMPDIR}/splitted/${APP}/${FILE}")
                     mkdir -p "$(dirname "${TMPDIR}/final/${APP}/${NEWFILE}")"
                     touch "${TMPDIR}/final/${APP}/${NEWFILE}"

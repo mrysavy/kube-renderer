@@ -1,0 +1,19 @@
+releases:
+- name: test01
+  chart: ./source/plain01
+- name: test02
+  chart: ./source/helm01
+# kustomize removes all comments
+#- name: test03
+#  chart: ./source/TestChart
+#  transformers:
+#  - apiVersion: builtin
+#    kind: NamespaceTransformer
+#    metadata:
+#      name: not-important
+#      namespace: transformed
+environments:
+  default:
+    values:
+    - .kube-renderer:
+        render_filename_generator: comment

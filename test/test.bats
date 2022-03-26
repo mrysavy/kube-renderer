@@ -84,6 +84,10 @@ run_common_test() {
     run_common_test output-yq
 }
 
+@test "can render with comment output" {
+    run_common_test output-comment
+}
+
 @test "can render with state values" {
     run_common_test state-values
 }

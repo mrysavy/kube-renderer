@@ -1,11 +1,11 @@
+# Kuberenderer: cm2a.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm2a
-  namespace: {{ .StateValues.namespace }}
 ---
+# Kuberenderer: cm2b.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm2b
-  namespace: {{ .StateValues.namespace }}

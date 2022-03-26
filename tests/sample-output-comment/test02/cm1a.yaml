@@ -1,0 +1,7 @@
+# Source: TestChart/templates/cm1.yaml
+# Kuberenderer: cm1a.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1a
+  namespace: testns

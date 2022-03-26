@@ -1,0 +1,6 @@
+# Source: plain01/templates/cm2.yaml
+# Kuberenderer: cm2a.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm2a

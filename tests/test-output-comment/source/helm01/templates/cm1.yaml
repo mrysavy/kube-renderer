@@ -1,0 +1,13 @@
+# Kuberenderer: cm1a.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1a
+  namespace: {{ .Values.namespace }}
+---
+# Kuberenderer: cm1b.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm1b
+  namespace: {{ .Values.namespace }}
