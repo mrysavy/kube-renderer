@@ -6,7 +6,7 @@ all: shellcheck clean build tests
 suite: clean build tests_partial
 
 tests:
-	@test/bats/bin/bats test/test.bats
+	@test/bats/bin/bats -T test/test.bats
 
 tests_partial:
 	@test/bats/bin/bats test/test.bats -f $(SUITE)
