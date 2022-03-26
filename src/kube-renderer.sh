@@ -151,14 +151,14 @@ EOF
     chmod +x "${TMPDIR}/helm-internal"
 
     mkdir -p "${TMPDIR}/helmfile-values"
-    yq eval 'del(.helmfiles) | del(.releases)' "${TMPDIR}/source/helmfile.yaml" > "${TMPDIR}/source/helmfile-geomplate.yaml"         # Neccessary to be same directory (source) because of paths inside helmfile
+    yq eval 'del(.helmfiles) | del(.releases)' "${TMPDIR}/source/helmfile.yaml" > "${TMPDIR}/source/helmfile-gomplate.yaml"         # Neccessary to be same directory (source) because of paths inside helmfile
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"     helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/app-{{ .Release.Name }}.yaml" "${SKIP_DEPS[@]}"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"      helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/gomplate"   helmfile -f "${TMPDIR}/source/helmfile-geomplate.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" --allow-no-matching-release build --embed-values 2>/dev/null > "${TMPDIR}/helmfile-values/globals-gomplate.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/gomplate"   helmfile -f "${TMPDIR}/source/helmfile-gomplate.yaml"  "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" --allow-no-matching-release build --embed-values 2>/dev/null > "${TMPDIR}/helmfile-values/globals-gomplate.yaml"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/list"       helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" list --keep-temp-dir --output json | yq -PM > "${TMPDIR}/helmfile-values/list.yaml"
     yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/app-"'" + .name + "-metadata.yaml"' "${TMPDIR}/helmfile-values/globals.yaml"
     # shellcheck disable=SC2016
-    yq eval '. as $item ireduce ({}; . * $item) | .releases' "${TMPDIR}/helmfile-values/globals.yaml" > "${TMPDIR}/helmfile-values/releases.yaml"
+    yq eval -N '.releases // ""' "${TMPDIR}/helmfile-values/globals.yaml" > "${TMPDIR}/helmfile-values/releases.yaml"
 
     yq eval '.renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
     yq eval '.renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
@@ -199,20 +199,6 @@ EOF
             echo "${APP}: ${TARGET_RELEASE}" >> "${TMPDIR}/helmfile-values/mapping-releases.yaml"
         done; unset APP
     done; unset GLOBAL
-
-    while IFS= read -r -d '' FILE; do
-        # shellcheck disable=SC2016
-        gomplate \
-            -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
-                <(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml") \
-                <(yq eval '{ "Releases": . }'    "${TMPDIR}/helmfile-values/releases.yaml") \
-                <(yq eval '{ "Metadata": . }'    "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml") \
-                <(yq eval '{ "ReleasesMap": . }' "${TMPDIR}/helmfile-values/mapping-releases.yaml") \
-                <(yq eval '{ "DirsMap": . }'     "${TMPDIR}/helmfile-values/mapping-dirs.yaml") \
-                )?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
-
-        rm "${FILE}"
-    done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
 
     # Output to single plain stdout lost information about helm release
     helmfile -f "${TMPDIR}/source/helmfile.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
@@ -317,11 +303,47 @@ EOF
         fi
     done; unset APP
 
+    yq eval '.bootstrap_template // ""' "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml" > "${TMPDIR}/helmfile-values/bootstrap-template"
+
+    local BOOTSTRAPS=()
+    if [[ -s "${TMPDIR}/helmfile-values/bootstrap-template" ]]; then
+        # shellcheck disable=SC2016
+        gomplate "${ARGS_GMPL[@]}" \
+            -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
+                <(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml") \
+                <(yq eval '{ "Releases": . }'    "${TMPDIR}/helmfile-values/releases.yaml") \
+                <(yq eval '{ "Metadata": . }'    "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml") \
+                <(yq eval '{ "ReleasesMap": . }' "${TMPDIR}/helmfile-values/mapping-releases.yaml") \
+                <(yq eval '{ "DirsMap": . }'     "${TMPDIR}/helmfile-values/mapping-dirs.yaml") \
+                )?type=application/yaml -f "${TMPDIR}/helmfile-values/bootstrap-template" -o "${TMPDIR}/helmfile-values/bootstrap-template.yaml"
+
+        # shellcheck disable=SC2016
+        local PATTERN; PATTERN='head_comment | capture("(?sm)^.*^Bootstrap: (?P<bootstrap>.*?$).*$") | .bootstrap'
+
+        mkdir -p "${TMPDIR}/bootstrap/"
+        # shellcheck disable=SC2016
+        yq eval -N -s '("'"${TMPDIR}/bootstrap/"'"'' + $index) + ".yaml"' "${TMPDIR}/helmfile-values/bootstrap-template.yaml"
+        for FILE in $(find "${TMPDIR}/bootstrap/" -type f -printf "%f\n" | sort -V); do
+            local NEWFILE; NEWFILE=$(yq eval -N "${PATTERN}" "${TMPDIR}/bootstrap/${FILE}")
+            if [[ -n "${NEWFILE}" ]]; then
+                BOOTSTRAPS+=("${NEWFILE%/*}")
+                mkdir -p "$(dirname "${TMPDIR}/final/${NEWFILE}")"
+                touch "${TMPDIR}/final/${NEWFILE}"
+                yq eval -i '.' "${TMPDIR}/final/${NEWFILE}" "${TMPDIR}/bootstrap/${FILE}"
+            fi
+        done; unset FILE
+    fi
+
     for APP in "${!RELEASES[@]}"; do
         local TARGET_RELEASE=${RELEASES["${APP}"]}
         local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
         mkdir -p "${TARGET}/${TARGET_DIR}"
         cp -r "${TMPDIR}/final/${APP}/"* "${TARGET}/${TARGET_DIR}/"
+    done; unset APP
+
+    for BOOTSTRAP in "${BOOTSTRAPS[@]}"; do
+        mkdir -p "${TARGET}/${BOOTSTRAP}"
+        cp -r "${TMPDIR}/final/${BOOTSTRAP}/"* "${TARGET}/${BOOTSTRAP}/"
     done; unset APP
 }
 

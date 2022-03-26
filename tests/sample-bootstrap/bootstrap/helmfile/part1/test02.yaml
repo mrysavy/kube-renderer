@@ -1,5 +1,4 @@
-# Source: bootstrap/templates/bootstrap.yaml
-# Bootstrap: helmfile/part1/test02.yaml
+# Bootstrap: bootstrap/helmfile/part1/test02.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -92,10 +92,6 @@ run_common_test() {
     run_common_test state-values
 }
 
-@test "can render with gomplate" {
-    run_common_test gomplate
-}
-
 @test "can render with yq output custom" {
     run_common_test output-yq-custom
 }

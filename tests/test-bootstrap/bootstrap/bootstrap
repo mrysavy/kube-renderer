@@ -1,5 +1,5 @@
-{{ range .Releases }}
-# Bootstrap: {{ $.Metadata.helmfile_dir }}/{{ .values | jsonpath `$[?(@['\.kube-renderer'])]['\.kube-renderer'].target_dir` }}.yaml
+{{- range (.Releases | coll.Append (`{ "name": "bootstrap", "values": [ ".kube-renderer": { "target_dir": "../bootstrap" } ] }` | data.JSON )) -}}
+# Bootstrap: bootstrap/{{ $.Metadata.helmfile_dir }}/{{ .values | jsonpath `$[?(@['\.kube-renderer'])]['\.kube-renderer'].target_dir` }}.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
