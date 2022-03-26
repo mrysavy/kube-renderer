@@ -18,6 +18,10 @@
 set -eu -o pipefail
 
 function internal_helm() {
+    if [[ "${DEBUG_MODE}" == "true" ]]; then
+        set -x
+    fi
+
     local HELMBINARY=$1; shift;
     if [[ -z "${HELMBINARY}" ]]; then
         HELMBINARY=helm
@@ -105,6 +109,7 @@ function render {
     if [[ "${DEBUG_MODE}" == "true" ]]; then
       ARGS+=("--debug")
       ARGS_TMPL+=("--skip-cleanup")
+      ARGS_GMPL+=("--verbose")
     else
       ARGS+=("--quiet")
     fi
@@ -377,6 +382,7 @@ function parse_args {
 
 parse_args "$@"
 if [[ "${DEBUG_MODE}" == "true" ]]; then
+    export DEBUG_MODE
     set -x
 fi
 
@@ -391,6 +397,7 @@ if [[ -z "${LOCAL_HELM_CACHE}" ]]; then
     export HELM_CACHE_HOME="${TMPDIR}/helmhome"
     export HELM_CONFIG_HOME="${TMPDIR}/helmhome"
     export HELM_DATA_HOME="${TMPDIR}/helmhome"
+    export XDG_CACHE_HOME="${TMPDIR}/cache"
 fi
 
 render
