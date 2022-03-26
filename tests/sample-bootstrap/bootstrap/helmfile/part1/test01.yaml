@@ -1,3 +1,5 @@
+# Source: bootstrap/templates/bootstrap.yaml
+# Bootstrap: helmfile/part1/test01.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,4 +8,3 @@ metadata:
 data:
   param1: value1
   param2: value2
-

@@ -1,0 +1,14 @@
+{{ range .Releases }}
+# Bootstrap: {{ $.Metadata.helmfile_dir }}/{{ .values | jsonpath `$[?(@['\.kube-renderer'])]['\.kube-renderer'].target_dir` }}.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .name }}
+  namespace: {{ if has . "namespace" }}{{ .namespace | default "bootstrap" }}{{ else }}bootstrap{{ end }}
+{{ if ne "bootstrap" .name -}}
+data:
+  param1: {{ .values | jsonpath `$[?(@.param1)].param1` }}
+  param2: {{ .values | jsonpath `$[?(@.param2)].param2` }}
+{{ end }}
+---
+{{ end }}

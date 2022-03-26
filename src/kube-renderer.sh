@@ -132,6 +132,8 @@ EOF
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/list"       helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" list --keep-temp-dir --output json | yq -PM > "${TMPDIR}/helmfile-values/list.yaml"
     yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/app-"'" + .name + "-metadata.yaml"' "${TMPDIR}/helmfile-values/globals.yaml"
     yq eval '.[].name' "${TMPDIR}/helmfile-values/list.yaml" > "${TMPDIR}/helmfile-values/names.yaml"
+    # shellcheck disable=SC2016
+    yq eval '. as $item ireduce ({}; . * $item) | .releases' "${TMPDIR}/helmfile-values/globals.yaml" > "${TMPDIR}/helmfile-values/releases.yaml"
 
     yq eval '.renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
     yq eval '.renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
@@ -149,7 +151,14 @@ EOF
     done; unset GLOBAL
 
     while IFS= read -r -d '' FILE; do
-        gomplate -c .=<(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml" </dev/zero)?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
+        # shellcheck disable=SC2016
+        gomplate \
+            -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
+                <(yq eval '{ "StateValues": . }' "${TMPDIR}/helmfile-values/gomplate-values.yaml") \
+                <(yq eval '{ "Releases": . }'    "${TMPDIR}/helmfile-values/releases.yaml") \
+                <(yq eval '{ "Metadata": . }'    "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml") \
+                )?type=application/yaml -f "${FILE}" -o "${FILE%.tmpl}"    # newer yq version consumes stdin even when input file is specified
+
         rm "${FILE}"
     done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
 
@@ -284,11 +293,6 @@ EOF
         mkdir -p "${TARGET}/${TARGET_DIR}"
         cp -r "${TMPDIR}/final/${APP}/"* "${TARGET}/${TARGET_DIR}/"
     done; unset APP
-
-    if [[ -z "${SELECTOR}" && -f "${SOURCE}/bootstrap.yaml" ]]; then
-        bootstrap
-        cp -r "${TMPDIR}/bootstrap" "${TARGET}/bootstrap"
-    fi
 }
 
 function postrender_kustomize {
@@ -298,36 +302,6 @@ function postrender_kustomize {
     kustomize build "${TMPDIR}/merged/${APP}" > "${TMPDIR}/postrendered/${APP}/resources.yaml"
 }
 
-function bootstrap() {
-    mkdir -p "${TMPDIR}/bootstrap"
-
-    for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
-        for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
-            local TARGET_RELEASE=${RELEASES["${APP}"]}
-            local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
-
-            mkdir -p "$(dirname "${TMPDIR}/bootstrap/${TARGET_DIR}")"
-
-            if [[ "${TARGET_RELEASE}" == "${APP}" ]]; then
-                # shellcheck disable=SC2016
-                gomplate \
-                    -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
-                        <(yq eval    '{ "Metadata": . }'     "${TMPDIR}/helmfile-values/app-${APP}-metadata.yaml.yml") \
-                        <(yq eval    '{ "Values": . }'       "${TMPDIR}/helmfile-values/app-${APP}-values.yaml") \
-                        <(yq eval    '{ "Kuberenderer": . }' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml") \
-                        )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/${TARGET_DIR}.yaml"
-            fi
-        done; unset APP
-    done; unset GLOBAL
-
-    # shellcheck disable=SC2016
-    gomplate \
-        -c .=<(yq eval-all '. as $item ireduce ({}; . * $item )' \
-            <(yq eval -n '{ "Metadata": { "name": "bootstrap" } }') \
-            <(yq eval -n '{ "Values": {} }') \
-            <(yq eval -n '{ "Kuberenderer": {} }') \
-            )?type=application/yaml -f "${SOURCE}/bootstrap.yaml" -o "${TMPDIR}/bootstrap/bootstrap.yaml"
-}
 
 function usage {
     echo "usage: kube-renderer.sh SOURCE TARGET [-Vh] [-l <selector>] [-d]"
