@@ -131,7 +131,6 @@ EOF
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/gomplate"   helmfile -f "${TMPDIR}/source/helmfile-geomplate.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" --allow-no-matching-release build --embed-values 2>/dev/null > "${TMPDIR}/helmfile-values/globals-gomplate.yaml"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/list"       helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" list --keep-temp-dir --output json | yq -PM > "${TMPDIR}/helmfile-values/list.yaml"
     yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/app-"'" + .name + "-metadata.yaml"' "${TMPDIR}/helmfile-values/globals.yaml"
-    yq eval '.[].name' "${TMPDIR}/helmfile-values/list.yaml" > "${TMPDIR}/helmfile-values/names.yaml"
     # shellcheck disable=SC2016
     yq eval '. as $item ireduce ({}; . * $item) | .releases' "${TMPDIR}/helmfile-values/globals.yaml" > "${TMPDIR}/helmfile-values/releases.yaml"
 
