@@ -4,3 +4,6 @@ environments:
     values:
       - .kube-renderer:
           render_filename_generator: yq
+
+helmfiles:
+- helmfile.d/*

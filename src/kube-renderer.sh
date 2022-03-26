@@ -100,13 +100,7 @@ function render {
 
     local ARGS=()
     local ARGS_TMPL=()
-    local HELMBINARY=
-    if [[ -f "${SOURCE}/helmfile.yaml" ]]; then
-        ARGS+=("-f" "${TMPDIR}/source/helmfile.yaml")
-        HELMBINARY="$(yq eval '.helmBinary // ""' "${TMPDIR}/source/helmfile.yaml")"
-    elif [[ -d "${SOURCE}/helmfile.d" ]]; then
-        ARGS+=("-f" "${TMPDIR}/source/helmfile.d")
-    fi
+    local HELMBINARY; HELMBINARY="$(yq eval '.helmBinary // ""' "${TMPDIR}/source/helmfile.yaml")"
 
     if [[ "${DEBUG_MODE}" == "true" ]]; then
       ARGS+=("--debug")
@@ -131,14 +125,16 @@ EOF
     chmod +x "${TMPDIR}/helm-internal"
 
     mkdir -p "${TMPDIR}/helmfile-values"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"  helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/app-{{ .Release.Name }}.yaml" "${SKIP_DEPS[@]}"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"   helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
-    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/list"    helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" list --keep-temp-dir --output json | yq -PM > "${TMPDIR}/helmfile-values/list.yaml"
+    yq eval 'del(.helmfiles) | del(.releases)' "${TMPDIR}/source/helmfile.yaml" > "${TMPDIR}/source/helmfile-geomplate.yaml"         # Neccessary to be same directory (source) because of paths inside helmfile
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"     helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/app-{{ .Release.Name }}.yaml" "${SKIP_DEPS[@]}"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"      helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/gomplate"   helmfile -f "${TMPDIR}/source/helmfile-geomplate.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" --allow-no-matching-release build --embed-values 2>/dev/null > "${TMPDIR}/helmfile-values/globals-gomplate.yaml"
+    CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/list"       helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" list --keep-temp-dir --output json | yq -PM > "${TMPDIR}/helmfile-values/list.yaml"
     yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/app-"'" + .name + "-metadata.yaml"' "${TMPDIR}/helmfile-values/globals.yaml"
     yq eval '.[].name' "${TMPDIR}/helmfile-values/list.yaml" > "${TMPDIR}/helmfile-values/names.yaml"
 
-    yq eval 'select(document_index == 0) | .renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
-    yq eval 'select(document_index == 0) | .renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
+    yq eval 'select(document_index == 0) | .renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
+    yq eval 'select(document_index == 0) | .renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
 
     # shellcheck disable=SC2016
     yq eval-all -N -s '"'"${TMPDIR}/helmfile-values/global-"'" + $index' "${TMPDIR}/helmfile-values/globals.yaml"
@@ -188,7 +184,7 @@ EOF
     done < <(find "${TMPDIR}/source" -type f -name '*.tmpl' -print0)
 
     # Output to single plain stdout lost information about helm release
-    helmfile "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    helmfile -f "${TMPDIR}/source/helmfile.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
 
     declare -A RELEASES
     declare -A DIRS
