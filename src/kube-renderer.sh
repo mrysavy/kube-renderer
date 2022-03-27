@@ -158,7 +158,7 @@ EOF
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/list"       helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" list --keep-temp-dir --output json | yq -PM > "${TMPDIR}/helmfile-values/list.yaml"
     yq eval '.releases[]' -s '"'"${TMPDIR}/helmfile-values/app-"'" + .name + "-metadata.yaml"' "${TMPDIR}/helmfile-values/globals.yaml"
     # shellcheck disable=SC2016
-    yq eval -N '.releases // ""' "${TMPDIR}/helmfile-values/globals.yaml" > "${TMPDIR}/helmfile-values/releases.yaml"
+    yq eval -N '.releases // ""' "${TMPDIR}/helmfile-values/globals.yaml" | yq eval '.[] |= .values = (.values[] as $item ireduce ({}; . * $item ))' > "${TMPDIR}/helmfile-values/releases.yaml"
 
     yq eval '.renderedvalues | del(.".*")'        "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-values.yaml"
     yq eval '.renderedvalues | .".kube-renderer"' "${TMPDIR}/helmfile-values/globals-gomplate.yaml" | sed 's/^null$/{}/; /^---$/ {d;}' > "${TMPDIR}/helmfile-values/gomplate-kuberenderer.yaml"
