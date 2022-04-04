@@ -1,5 +1,3 @@
----
-# Source: plain01/templates/cm1.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -8,7 +6,6 @@ metadata:
     label1: value1
     label3: value3
 ---
-# Source: plain01/templates/cm1.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -17,7 +14,6 @@ metadata:
     label1: value1
     label3: value3
 ---
-# Source: plain01/templates/cm2.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -26,7 +22,6 @@ metadata:
     label1: value1
     label3: value3
 ---
-# Source: plain01/templates/cm2.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:

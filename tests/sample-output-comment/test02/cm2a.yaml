@@ -1,4 +1,3 @@
-# Source: TestChart/templates/cm2.yaml
 # Kuberenderer: cm2a.yaml
 apiVersion: v1
 kind: ConfigMap

@@ -1,4 +1,3 @@
-# Source: TestChart/templates/patched_resources.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:

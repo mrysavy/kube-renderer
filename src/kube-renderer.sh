@@ -34,8 +34,6 @@ function internal_helm() {
         local HELMOUTPUTDIR; HELMOUTPUTDIR="$(echo "$@" | sed -E 's/.*--output-dir[=\ ](\S+).*/\1/')"
         local APP; APP="$(echo "$@" | sed -E 's/template(\ --\S+)*\ (\S+)\ .*/\2/')"
 
-        local HELMSOURCEDIR; HELMSOURCEDIR="$(echo "$@" | sed -E 's/^.*template\ +'"${APP}"'\ +(\S+).*$/\1/')"
-
         local ARG_KUBE_VERSION=()
         if [[ -f "${TMPDIR}/source/kubeversion-${APP}" ]]; then
             ARG_KUBE_VERSION=("--kube-version" "$(cat "${TMPDIR}/source/kubeversion-${APP}")")
@@ -44,7 +42,6 @@ function internal_helm() {
         fi
 
         local ARGS=()
-        local FIX_HOOKS=""
         if [[ -f "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml" ]]; then
             local HOOKS; HOOKS=$(yq eval '.flags.hooks // false' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ ! "${HOOKS}" == "true" ]]; then
@@ -58,7 +55,6 @@ function internal_helm() {
             if [[ ! "${TESTS}" == "true" ]]; then
                 ARGS+=("--skip-tests")
             fi
-            FIX_HOOKS=$(yq eval '.flags.fixhooks // false' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
         fi
 
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
@@ -68,31 +64,32 @@ function internal_helm() {
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
             done; unset FILE
         else
-            if [[ "${FIX_HOOKS}" == "true" ]] && yq eval -e 'select(.metadata.annotations."helm.sh/hook" != "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null && yq eval -e 'select(.metadata.annotations."helm.sh/hook" == "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null; then
-                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_res.yaml|'   "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
-                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_hooks.yaml|' "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_hooks.yaml"
+            local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
+            mkdir -p "${TMPDIR}/helmfile-internal/${APP}"
 
-                mkdir \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res" \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
+            case "${POSTRENDERER_TYPE}" in
+                "kustomize" )
+                    yq eval '.helm_postrenderer.data' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/helmfile-internal/${APP}/resources.yaml"'"' - > "${TMPDIR}/helmfile-internal/${APP}/kustomization.yaml"
+                    cat > "${TMPDIR}/helmfile-internal/${APP}/postrenderer.sh" <<EOF
+#!/usr/bin/env bash
 
-                # shellcheck disable=SC2016
-                yq eval 'select(.metadata.annotations."helm.sh/hook" != "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"'"   + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
-                # shellcheck disable=SC2016
-                yq eval 'select(.metadata.annotations."helm.sh/hook" == "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/"'" + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
+cat <&0 | sed -E 's|^# Source: (.*)$|.kuberenderer-source: \1|' > "${TMPDIR}/helmfile-internal/${APP}/resources.yaml"   # save source information (kustomize removes all comments)
+exec kustomize build "${TMPDIR}/helmfile-internal/${APP}/" | yq eval '.".kuberenderer-source" = .".kuberenderer-source" // "kustomized.yaml"'
+EOF
+                    ;;
+                * )
+                    cat > "${TMPDIR}/helmfile-internal/${APP}/postrenderer.sh" <<EOF
+#!/usr/bin/env bash
 
-                find "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"   -type f -printf "%f\n" | sort -n | sed "s|^|${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/|"   | xargs yq eval 'select(length!=0)' <(echo -n '') > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
-                find "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/" -type f -printf "%f\n" | sort -n | sed "s|^|${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/|" | xargs yq eval 'select(length!=0)' <(echo -n '') > "${HELMSOURCEDIR}/templates/patched_resources_hooks.yaml"
+sed -E 's|^# Source: (.*)$|.kuberenderer-source: \1|'   #
+EOF
+                    ;;
+            esac
 
-                rm -f \
-                    "${HELMSOURCEDIR}/templates/patched_resources.yaml" \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
-                rm -rf \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res" \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
-            fi
+            ARGS+=("--post-renderer" "${TMPDIR}/helmfile-internal/${APP}/postrenderer.sh")
+            chmod u+x "${TMPDIR}/helmfile-internal/${APP}/postrenderer.sh"
 
-            exec "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" "${ARGS[@]}"
+            "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" "${ARGS[@]}" | sed -E 's|^# Source: (.*)$|.kuberenderer-source: \1|' | yq eval '.".kuberenderer-release" = "'"${APP}"'"'   # save source information (yq doesnt work well with comments in multi-document file); helm hooks are processed after post-render
         fi
     else
         exec "${HELMBINARY}" "$@"
@@ -200,27 +197,43 @@ EOF
         done; unset APP
     done; unset GLOBAL
 
-    # Output to single plain stdout lost information about helm release
-    helmfile -f "${TMPDIR}/source/helmfile.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps --output-dir "${TMPDIR}/helmfile" --output-dir-template '{{ .OutputDir }}/{{ .Release.Name }}'
+    mkdir "${TMPDIR}/helmfile"
+    helmfile -f "${TMPDIR}/source/helmfile.yaml" "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" template "${ARGS_TMPL[@]}" --skip-deps > "${TMPDIR}/helmfile.yaml"
+    # shellcheck disable=SC2016
+#    yq eval -N -s '"'"${TMPDIR}/helmfile/"'" + $index' "${TMPDIR}/helmfile.yaml"
+
+    yq eval '"'"${TMPDIR}"'/helmfile/" + .".kuberenderer-release" + "/" + .".kuberenderer-source"' "${TMPDIR}/helmfile.yaml" | xargs dirname | xargs mkdir -p
+
+#    yq eval 'del(.".kuberenderer-release") | del(.".kuberenderer-source")' -s '"'"${TMPDIR}"'/" + .".kuberenderer-release" + "/" + .".kuberenderer-source"' "${TMPDIR}/helmfile.yaml"
+    # shellcheck disable=SC2016
+    yq eval -N -s '"'"${TMPDIR}"'/helmfile/" + .".kuberenderer-release" + "/" + .".kuberenderer-source" + "~" + $index' "${TMPDIR}/helmfile.yaml"
+
+#    for FILE in $(find "${TMPDIR}/helmfile/" -type f); do
+
+    find "${TMPDIR}/helmfile/" -type f | tac | while IFS= read -r FILE; do
+        #TODO normalize functions
+        NEWFILE=${FILE%~*.yml}
+
+        touch "${NEWFILE}"
+        yq eval -i 'del(.".kuberenderer-release") | del(.".kuberenderer-source")' "${NEWFILE}" "${FILE}"
+        rm "${FILE}"
+
+
+#        yq eval 'del(.".kuberenderer-release") | del(.".kuberenderer-source")' "${FILE}" > "${FILE%.yml}"
+    done
 
     for APP in "${!RELEASES[@]}"; do
         if [[ -n "${SELECTOR}" && ! -d "${TMPDIR}/helmfile/${APP}" ]]; then
             continue
         fi
 
-        mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/labelsremoved/${APP}" "${TMPDIR}/final/${APP}"
+        mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/labelsremoved/${APP}" "${TMPDIR}/final/${APP}"
         find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
-        local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
-        case "${POSTRENDERER_TYPE}" in
-            "kustomize" ) postrender_kustomize "${APP}";;
-            * ) cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
-        esac
-
         if [[ ! -f "${TMPDIR}/combined/${APP}/resources.yaml" ]]; then
-            cp "${TMPDIR}/postrendered/${APP}/resources.yaml" "${TMPDIR}/combined/${APP}/resources.yaml"
+            cp "${TMPDIR}/merged/${APP}/resources.yaml" "${TMPDIR}/combined/${APP}/resources.yaml"
         else
-            yq eval-all --inplace "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/postrendered/${APP}/resources.yaml"
+            yq eval-all --inplace "${TMPDIR}/combined/${APP}/resources.yaml" "${TMPDIR}/merged/${APP}/resources.yaml"
         fi
 
         local REMOVE_LABELS; REMOVE_LABELS=$(yq eval '.remove_labels[] // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
@@ -346,14 +359,6 @@ EOF
         cp -r "${TMPDIR}/final/${BOOTSTRAP}/"* "${TARGET}/${BOOTSTRAP}/"
     done; unset APP
 }
-
-function postrender_kustomize {
-    local APP=$1; shift
-
-    yq eval '.helm_postrenderer.data' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml" | yq eval '(.resources[] | select(. == "<HELM>")) = "'"${TMPDIR}/merged/${APP}/resources.yaml"'"' - > "${TMPDIR}/merged/${APP}/kustomization.yaml"
-    kustomize build "${TMPDIR}/merged/${APP}" > "${TMPDIR}/postrendered/${APP}/resources.yaml"
-}
-
 
 function usage {
     echo "usage: kube-renderer.sh SOURCE TARGET [-Vh] [-l <selector>] [-d]"

@@ -1,4 +1,3 @@
-# Source: plain01/templates/cm2.yaml
 # Kuberenderer: cm2b.yaml
 apiVersion: v1
 kind: ConfigMap

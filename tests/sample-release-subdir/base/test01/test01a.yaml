@@ -1,23 +1,18 @@
----
-# Source: plain02/templates/cm3.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm3a
 ---
-# Source: plain02/templates/cm3.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm3b
 ---
-# Source: plain02/templates/cm4.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cm4a
 ---
-# Source: plain02/templates/cm4.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:

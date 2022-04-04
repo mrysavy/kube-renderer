@@ -1,5 +1,5 @@
 releases:
-- name: fixhooks-default
+- name: render-hooks
   chart: ./source/TestChart
   transformers:
     - apiVersion: builtin
@@ -11,29 +11,3 @@ releases:
     - .kube-renderer:
         flags:
           hooks: true
-- name: fixhooks-false
-  chart: ./source/TestChart
-  transformers:
-    - apiVersion: builtin
-      kind: NamespaceTransformer
-      metadata:
-        name: not-important
-        namespace: transformed
-  values:
-    - .kube-renderer:
-        flags:
-          hooks: true
-          fixhooks: false
-- name: fixhooks-true
-  chart: ./source/TestChart
-  transformers:
-    - apiVersion: builtin
-      kind: NamespaceTransformer
-      metadata:
-        name: not-important
-        namespace: transformed
-  values:
-    - .kube-renderer:
-        flags:
-          hooks: true
-          fixhooks: true
