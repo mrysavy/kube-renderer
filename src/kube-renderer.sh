@@ -437,6 +437,7 @@ mkdir "${TMPDIR}/helmfile-temp" "${TMPDIR}/helmfile-temp-chartify"
 export HELMFILE_TEMPDIR="${TMPDIR}/helmfile-temp"
 export CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify"
 if [[ -z "${LOCAL_HELM_CACHE}" ]]; then
+    export HELM_PLUGINS=$(helm env | grep HELM_PLUGINS | cut -d= -f2 | tr -d '"')
     export HELM_CACHE_HOME="${TMPDIR}/helmhome"
     export HELM_CONFIG_HOME="${TMPDIR}/helmhome"
     export HELM_DATA_HOME="${TMPDIR}/helmhome"
