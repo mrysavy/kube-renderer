@@ -8,9 +8,8 @@ run_common_test() {
     local name=$1; shift
 
     mkdir "tests-output/test-${name}"
-    run output/kube-renderer.sh "tests/test-${name}" "tests-output/test-${name}"
+    run output/kube-renderer.sh -d "tests/test-${name}" "tests-output/test-${name}"
     assert_success
-    find $TMPDIR >&2
     run diff -r "tests-output/test-${name}" "tests/sample-${name}"
     assert_success
 }
