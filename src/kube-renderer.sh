@@ -296,10 +296,10 @@ EOF
                     fi
                 done; unset FILE
 
-                cp -r "${TMPDIR}/reconstructed/${APP}/"* "${TMPDIR}/final/${APP}/"
+                for item in "${TMPDIR}/reconstructed/${APP}/"*; do cp -r "${item}" "${TMPDIR}/final/${APP}/"; done
             fi
         else
-            cp -r "${TMPDIR}/labelsremoved/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
+            cp "${TMPDIR}/labelsremoved/${APP}/resources.yaml" "${TMPDIR}/final/${APP}/${APP}.yaml"
         fi
     done; unset APP
 
@@ -338,12 +338,12 @@ EOF
         local TARGET_RELEASE=${RELEASES["${APP}"]}
         local TARGET_DIR=${DIRS["${TARGET_RELEASE}"]}
         mkdir -p "${TARGET}/${TARGET_DIR}"
-        cp -r "${TMPDIR}/final/${APP}/"* "${TARGET}/${TARGET_DIR}/"
+        for item in "${TMPDIR}/final/${APP}/"*; do cp -r "${item}" "${TARGET}/${TARGET_DIR}/"; done
     done; unset APP
 
     for BOOTSTRAP in "${BOOTSTRAPS[@]}"; do
         mkdir -p "${TARGET}/${BOOTSTRAP}"
-        cp -r "${TMPDIR}/final/${BOOTSTRAP}/"* "${TARGET}/${BOOTSTRAP}/"
+        for item in "${TMPDIR}/final/${BOOTSTRAP}/"*; do cp -r "${item}" "${TARGET}/${BOOTSTRAP}/"; done
     done; unset APP
 }
 
