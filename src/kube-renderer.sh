@@ -429,7 +429,8 @@ if [[ "${DEBUG_MODE}" == "true" ]]; then
     set -x
 fi
 
-TMPDIR=$(mktemp -d /tmp/kube-renderer.XXXXXXXXXX)
+TMPDIR=${TMPDIR:-/tmp}
+TMPDIR=$(mktemp -d "${TMPDIR}/kube-renderer.XXXXXXXXXX")
 if [[ "${DEBUG_MODE}" != "true" ]]; then
     trap 'rm -rf -- "$TMPDIR"' EXIT
 fi

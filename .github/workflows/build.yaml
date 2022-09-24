@@ -17,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Setup environment
+        run: echo "TMPDIR=$RUNNER_TEMP" >> $GITHUB_ENV
+
       - name: List environment
         run: env
 
