@@ -109,10 +109,10 @@ function render {
 
     # shellcheck disable=SC2016
     local RENDER_FILENAME_PATTERN_BASE='
-        .".kube-renderer".crds  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".crds  |= (sub("^(?:(CustomResourceDefinition~apiextensions.k8s.io)|.*)$", "$1")                | sub(".+", "/crds"))  |
-        .".kube-renderer".tests = (.metadata.annotations."helm.sh/hook" // "")                                                                   | .".kube-renderer".tests |= (sub("^(?:(test)|.*)$", "$1")                                                         | sub(".+", "/tests")) |
-        .".kube-renderer".hooks = ((.metadata.annotations."helm.sh/hook" // "") + (.metadata.annotations."argocd.argoproj.io/hook" // ""))       | .".kube-renderer".hooks |= (sub("test", "")                                                                      | sub(".+", "/hooks")) |
-        .".kube-renderer".rbac  = .kind + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".rbac  |= (sub("^(?:((?:ClusterRoleBinding|ClusterRole)~rbac.authorization.k8s.io)|.*)$", "$1") | sub(".+", "/rbac"))  |
+        .".kube-renderer".crds  = (.kind // "") + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".crds  |= (sub("^(?:(CustomResourceDefinition~apiextensions.k8s.io)|.*)$", "$1")                | sub(".+", "/crds"))  |
+        .".kube-renderer".tests = (.metadata.annotations."helm.sh/hook" // "")                                                                           | .".kube-renderer".tests |= (sub("^(?:(test)|.*)$", "$1")                                                         | sub(".+", "/tests")) |
+        .".kube-renderer".hooks = ((.metadata.annotations."helm.sh/hook" // "") + (.metadata.annotations."argocd.argoproj.io/hook" // ""))               | .".kube-renderer".hooks |= (sub("test", "")                                                                      | sub(".+", "/hooks")) |
+        .".kube-renderer".rbac  = (.kind // "") + "~" + (.apiVersion // "" | sub("(.*)/.*", "$1"))                                                       | .".kube-renderer".rbac  |= (sub("^(?:((?:ClusterRoleBinding|ClusterRole)~rbac.authorization.k8s.io)|.*)$", "$1") | sub(".+", "/rbac"))  |
         (.metadata.namespace // "_cluster") +
         .".kube-renderer".crds +
         .".kube-renderer".tests +
