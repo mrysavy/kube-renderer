@@ -140,6 +140,10 @@ run_common_test() {
     run_common_test remove-labels
 }
 
+@test "can render empty document" {
+    run_common_test empty-document
+}
+
 teardown() {
     rm -rf tests-output
 }

@@ -213,6 +213,9 @@ EOF
         mkdir -p "${TMPDIR}/merged/${APP}" "${TMPDIR}/postrendered/${APP}" "${TMPDIR}/combined/${APP}" "${TMPDIR}/labelsremoved/${APP}" "${TMPDIR}/final/${APP}"
         find "${TMPDIR}/helmfile/${APP}/" -type f | sort | xargs yq eval 'select(length!=0)' > "${TMPDIR}/merged/${APP}/resources.yaml"
 
+        # Fix comments in separated document (because of helm template starts with "---"
+        sed -i '/# Source: .*/{n; /---/ {d;}}' "${TMPDIR}/merged/${APP}/resources.yaml"
+
         local POSTRENDERER_TYPE; POSTRENDERER_TYPE=$(yq eval '.helm_postrenderer.type // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
         case "${POSTRENDERER_TYPE}" in
             "kustomize" ) postrender_kustomize "${APP}";;
