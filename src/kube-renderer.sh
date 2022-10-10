@@ -10,6 +10,7 @@
 ##### * bash (required)
 ##### * helmfile (required)
 ##### * yq v4 (required)
+########  - minimal version: 4.25.3 (because https://github.com/mikefarah/yq/issues/1165)
 ##### * helm v3 (required)
 ##### * kustomize (required)
 ##### * gomplate (optional)
@@ -284,7 +285,7 @@ EOF
                 mkdir -p "${TMPDIR}/splitted/${APP}" "${TMPDIR}/reconstructed/${APP}"
                 # shellcheck disable=SC2016
                 yq eval -N -s '("'"${TMPDIR}/splitted/${APP}/"'"'' + $index) + ".yaml"' "${TMPDIR}/labelsremoved/${APP}/resources.yaml"
-                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml.yml' -printf "%f\n" | sort -n); do
+                for FILE in $(find "${TMPDIR}/splitted/${APP}/" -name '*.yaml' -printf "%f\n" | sort -n); do
                     FILE="${TMPDIR}/splitted/${APP}/${FILE}"
                     local RECONSTRUCTED; RECONSTRUCTED="$(grep -m1 '# Source' "${FILE}" | sed 's/# Source: //')"
                     if [[ -n "${RECONSTRUCTED}" ]]; then
