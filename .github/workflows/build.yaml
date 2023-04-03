@@ -23,7 +23,7 @@ jobs:
           submodules: true
 
       - name: Helm toolset install
-        uses: hiberbee/github-action-helm@1.13.0
+        uses: hiberbee/github-action-helm@1.14.1
 
       - name: Prepare
         run: |
