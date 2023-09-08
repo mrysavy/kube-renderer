@@ -35,8 +35,6 @@ function internal_helm() {
         local HELMOUTPUTDIR; HELMOUTPUTDIR="$(echo "$@" | sed -E 's/.*--output-dir[=\ ](\S+).*/\1/')"
         local APP; APP="$(echo "$@" | sed -E 's/template(\ --\S+)*\ (\S+)\ .*/\2/')"
 
-        local HELMSOURCEDIR; HELMSOURCEDIR="$(echo "$@" | sed -E 's/^.*template\ +'"${APP}"'\ +(\S+).*$/\1/')"
-
         local ARG_KUBE_VERSION=()
         if [[ -f "${TMPDIR}/source/kubeversion-${APP}" ]]; then
             ARG_KUBE_VERSION=("--kube-version" "$(cat "${TMPDIR}/source/kubeversion-${APP}")")
@@ -45,7 +43,6 @@ function internal_helm() {
         fi
 
         local ARGS=()
-        local FIX_HOOKS=""
         if [[ -f "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml" ]]; then
             local HOOKS; HOOKS=$(yq eval '.flags.hooks // false' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ ! "${HOOKS}" == "true" ]]; then
@@ -59,7 +56,6 @@ function internal_helm() {
             if [[ ! "${TESTS}" == "true" ]]; then
                 ARGS+=("--skip-tests")
             fi
-            FIX_HOOKS=$(yq eval '.flags.fixhooks // false' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
         fi
 
         if [[ -n "${HELMOUTPUTDIR}" && "${HELMOUTPUTDIR}" =~ ^.*helmx\.[[:digit:]]+\.rendered$ ]]; then
@@ -70,30 +66,6 @@ function internal_helm() {
                 sed -i "\|# Source: ${FILE}|{d;}" "${HELMOUTPUTDIR}/${FILE}"
             done; unset FILE
         else
-            if [[ "${FIX_HOOKS}" == "true" ]] && yq eval -e 'select(.metadata.annotations."helm.sh/hook" != "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null && yq eval -e 'select(.metadata.annotations."helm.sh/hook" == "*")' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml" &>/dev/null; then
-                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_res.yaml|'   "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
-                sed 's|files/templates/patched_resources.yaml|files/templates/patched_resources_hooks.yaml|' "${HELMSOURCEDIR}/templates/patched_resources.yaml" > "${HELMSOURCEDIR}/templates/patched_resources_hooks.yaml"
-
-                mkdir \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res" \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
-
-                # shellcheck disable=SC2016
-                yq eval 'select(.metadata.annotations."helm.sh/hook" != "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"'"   + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
-                # shellcheck disable=SC2016
-                yq eval 'select(.metadata.annotations."helm.sh/hook" == "*")' -s '"'"${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/"'" + $index' "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
-
-                find "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/"   -type f -printf "%f\n" | sort -n | sed "s|^|${HELMSOURCEDIR}/files/templates/patched_resources_temp_res/|"   | xargs yq eval 'select(length!=0)' <(echo -n '') > "${HELMSOURCEDIR}/templates/patched_resources_res.yaml"
-                find "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/" -type f -printf "%f\n" | sort -n | sed "s|^|${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks/|" | xargs yq eval 'select(length!=0)' <(echo -n '') > "${HELMSOURCEDIR}/templates/patched_resources_hooks.yaml"
-
-                rm -f \
-                    "${HELMSOURCEDIR}/templates/patched_resources.yaml" \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources.yaml"
-                rm -rf \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_res" \
-                    "${HELMSOURCEDIR}/files/templates/patched_resources_temp_hooks"
-            fi
-
             exec "${HELMBINARY}" "${ARG_KUBE_VERSION[@]}" "$@" "${ARGS[@]}"
         fi
     else
