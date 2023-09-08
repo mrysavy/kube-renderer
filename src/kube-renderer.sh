@@ -125,7 +125,7 @@ EOF
     chmod +x "${TMPDIR}/helm-internal"
 
     mkdir -p "${TMPDIR}/helmfile-values"
-    yq eval 'del(.helmfiles) | del(.releases)' "${TMPDIR}/source/helmfile.yaml" > "${TMPDIR}/source/helmfile-gomplate.yaml"         # Neccessary to be same directory (source) because of paths inside helmfile
+    yq eval 'del(.helmfiles) | del(.releases) | . + { "releases": {}}' "${TMPDIR}/source/helmfile.yaml" | sed 's/releases: {}/releases:/' > "${TMPDIR}/source/helmfile-gomplate.yaml"         # Neccessary to be same directory (source) because of paths inside helmfile
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/values"     helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" write-values --output-file-template "${TMPDIR}/helmfile-values/app-{{ .Release.Name }}.yaml" "${SKIP_DEPS[@]}"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/build"      helmfile -f "${TMPDIR}/source/helmfile.yaml"           "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" build --embed-values > "${TMPDIR}/helmfile-values/globals.yaml"
     CHARTIFY_TEMPDIR="${TMPDIR}/helmfile-temp-chartify/gomplate"   helmfile -f "${TMPDIR}/source/helmfile-gomplate.yaml"  "${ARGS[@]}" --helm-binary "${TMPDIR}/helm-internal" --allow-no-matching-release build --embed-values 2>/dev/null > "${TMPDIR}/helmfile-values/globals-gomplate.yaml"
