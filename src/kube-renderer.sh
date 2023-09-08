@@ -170,6 +170,10 @@ EOF
 
     for GLOBAL in $(find "${TMPDIR}/helmfile-values/" -name 'global-*.yml' -printf "%f\n" | sort -V); do
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
+            if [[ $(yq eval 'filter(.name == "'"${APP}"'") | .[].enabled' "${TMPDIR}/helmfile-values/list.yaml") == 'false' ]]; then
+                continue
+            fi
+
             # shellcheck disable=SC2016
             yq eval-all '((select(fileIndex == 0) | .renderedvalues) * select(fileIndex == 1)) | del(.".*")'        "${TMPDIR}/helmfile-values/${GLOBAL}" "${TMPDIR}/helmfile-values/app-${APP}.yaml" | sed 's/^null$/{}/' | yq eval-all '. as $item ireduce ({}; . * $item)' | sed '/^---$/ {d;}' > "${TMPDIR}/helmfile-values/app-${APP}-values.yaml"
             # shellcheck disable=SC2016
@@ -186,6 +190,10 @@ EOF
         fi
 
         for APP in $(yq eval '.releases[].name' "${TMPDIR}/helmfile-values/${GLOBAL}"); do
+            if [[ $(yq eval 'filter(.name == "'"${APP}"'") | .[].enabled' "${TMPDIR}/helmfile-values/list.yaml") == 'false' ]]; then
+                continue
+            fi
+
             local TARGET_RELEASE; TARGET_RELEASE=$(yq eval '.target_release // ""' "${TMPDIR}/helmfile-values/app-${APP}-kuberenderer.yaml")
             if [[ -z "${TARGET_RELEASE}" ]]; then
                 TARGET_RELEASE="${APP}"
@@ -207,6 +215,10 @@ EOF
 
     shopt -s nullglob
     for APP in "${!RELEASES[@]}"; do
+        if [[ $(yq eval 'filter(.name == "'"${APP}"'") | .[].enabled' "${TMPDIR}/helmfile-values/list.yaml") == 'false' ]]; then
+            continue
+        fi
+
         if [[ -n "${SELECTOR}" && ! -d "${TMPDIR}/helmfile/${APP}" ]]; then
             continue
         fi
