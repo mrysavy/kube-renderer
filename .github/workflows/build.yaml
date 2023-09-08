@@ -23,11 +23,11 @@ jobs:
           submodules: true
 
       - name: Helm toolset install
-        uses: hiberbee/github-action-helm@1.13.0
+        uses: mamezou-tech/setup-helmfile@v1.2.0
 
       - name: Prepare
         run: |
-          curl -s -L -o /usr/local/bin/gomplate https://github.com/hairyhenderson/gomplate/releases/download/v3.10.0/gomplate_linux-amd64 &&
+          curl -s -L -o /usr/local/bin/gomplate https://github.com/hairyhenderson/gomplate/releases/download/v3.11.5/gomplate_linux-amd64 &&
           chmod +x /usr/local/bin/gomplate
 
       - name: Lint
