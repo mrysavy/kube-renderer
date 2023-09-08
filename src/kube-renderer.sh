@@ -309,7 +309,7 @@ EOF
                         touch "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}"
                         yq eval -i '.' "${TMPDIR}/reconstructed/${APP}/${RECONSTRUCTED}" "${FILE}"
                     else
-                        local NEWFILE="${FILE#${TMPDIR}/splitted/${APP}/}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
+                        local NEWFILE="${FILE#"${TMPDIR}/splitted/${APP}/"}"; NEWFILE="${TMPDIR}/reconstructed/${APP}/${NEWFILE%.yml}"
                         cp "${FILE}" "${NEWFILE}"
                     fi
                 done; unset FILE
